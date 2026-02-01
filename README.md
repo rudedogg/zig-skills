@@ -38,6 +38,10 @@ Using the zig skill please review @src/ and help me improve the codebase.
 - Some explanatory text may have slight imprecision (code examples are generally correct)
 - Patterns reference went through multiple iterations
 
+## Feedback
+
+Please [open an issue](https://github.com/rudedogg/zig-skill/issues) if you find any hallucinations, inaccuracies, or outdated patterns. No need to write a detailed report with a fix—just knowing about the problem helps improve the skill.
+
 ## Specification
 
 This skill follows the [Agent Skills Specification](https://agentskills.io/).
