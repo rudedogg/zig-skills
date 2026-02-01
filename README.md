@@ -21,9 +21,11 @@ Generated using Claude Opus 4.5 with the Zig standard library source code as con
 
 The methodology prioritizes grounding the model in real source code rather than hallucinated documentation.
 
+See https://austinrude.com/blog/making-a-zig-agent-skill/ for details.
+
 ## Usage
 
-Install to `~/.claude/skills/` per [Claude Code skill documentation](https://docs.anthropic.com/en/docs/claude-code/skills).
+Install the `zig-0.15` directory into `~/.claude/skills/` per [Claude Code skill documentation](https://docs.anthropic.com/en/docs/claude-code/skills).
 
 Example prompt:
 ```
