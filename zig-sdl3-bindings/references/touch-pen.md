@@ -168,21 +168,19 @@ SDL3 also provides built-in pinch detection:
 ### Polling Touch State
 
 ```zig
-// Get touch devices
-var count: c_int = undefined;
-const devices = try sdl3.touch.getTouchDevices(&count);
-defer sdl3.c.SDL_free(devices);
+// Get touch devices (returns slice directly)
+const devices = try sdl3.touch.getDevices();
+defer sdl3.free(devices.ptr);
 
-for (devices[0..@intCast(count)]) |device_id| {
-    const name = try sdl3.touch.getDeviceName(device_id);
-    const type = sdl3.touch.getDeviceType(device_id);
+for (devices) |device_id| {
+    const name = try device_id.getName();
+    const device_type = device_id.getType();
 
-    // Get active fingers
-    var finger_count: c_int = undefined;
-    const fingers = try sdl3.touch.getTouchFingers(device_id, &finger_count);
-    defer sdl3.c.SDL_free(fingers);
+    // Get active fingers (returns slice directly)
+    const fingers = try device_id.getFingers();
+    defer sdl3.free(fingers.ptr);
 
-    for (fingers[0..@intCast(finger_count)]) |finger| {
+    for (fingers) |finger| {
         const x = finger.x;
         const y = finger.y;
         const pressure = finger.pressure;

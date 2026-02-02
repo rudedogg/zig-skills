@@ -149,37 +149,39 @@ try sdl3.filesystem.removePath("/path/to/file");
 ```zig
 const sdl3 = @import("sdl3");
 
-// Open file for reading
-const stream = try sdl3.io_stream.Stream.fromFile("data.bin", "rb");
-defer stream.close();
+// Open file for reading (use FileMode enum)
+const stream = try sdl3.io_stream.Stream.initFromFile("data.bin", .read_binary);
+defer stream.deinit();
 
-// Read data
+// Read data (returns ?[]u8, null on EOF)
 var buffer: [1024]u8 = undefined;
-const bytes_read = try stream.read(&buffer);
+if (try stream.read(&buffer)) |bytes| {
+    // Process bytes
+}
 
 // Read all at once (allocates)
-const contents = try stream.loadFile(allocator);
-defer allocator.free(contents);
+const contents = try stream.loadFile(false);  // false = don't close stream
+defer sdl3.free(contents.ptr);
 
-// Read specific types
-const value = try stream.readU32(.little);
-const float_val = try stream.readF32(.little);
+// Read specific types (returns ?u32, null on EOF)
+if (try stream.readU32Le()) |value| {
+    // Use value
+}
 ```
 
 ### Writing Files
 
 ```zig
 // Open for writing
-const stream = try sdl3.io_stream.Stream.fromFile("output.bin", "wb");
-defer stream.close();
+const stream = try sdl3.io_stream.Stream.initFromFile("output.bin", .write_binary);
+defer stream.deinit();
 
-// Write data
+// Write data (returns number of bytes written)
 const data = "Hello, World!";
-try stream.write(data);
+_ = try stream.write(data);
 
 // Write specific types
-try stream.writeU32(12345, .little);
-try stream.writeF32(3.14, .little);
+try stream.writeU32Le(12345);
 
 // Ensure data is flushed
 try stream.flush();
@@ -190,32 +192,32 @@ try stream.flush();
 ```zig
 // Read from memory
 const data = @embedFile("embedded.bin");
-const stream = sdl3.io_stream.Stream.fromConstMem(data);
-defer stream.close();
+const stream = try sdl3.io_stream.Stream.initFromConstMem(data);
+defer stream.deinit();
 
 // Write to memory
 var buffer: [4096]u8 = undefined;
-const stream = sdl3.io_stream.Stream.fromMem(&buffer);
-defer stream.close();
+const stream = try sdl3.io_stream.Stream.initFromMem(&buffer);
+defer stream.deinit();
 
 // Dynamic memory stream
-const stream = try sdl3.io_stream.Stream.fromDynamicMem();
-defer stream.close();
+const stream = try sdl3.io_stream.Stream.initFromDynamicMem();
+defer stream.deinit();
 ```
 
 ### Seeking
 
 ```zig
-// Seek to position
-try stream.seek(100, .set);   // From start
-try stream.seek(-10, .cur);   // Relative to current
-try stream.seek(0, .end);     // From end
+// Seek to position (returns new position)
+const new_pos = try stream.seek(100, .set);   // From start
+_ = try stream.seek(-10, .cur);               // Relative to current
+_ = try stream.seek(0, .end);                 // From end
 
 // Get current position
 const pos = try stream.tell();
 
 // Get size
-const size = try stream.size();
+const size = try stream.getSize();
 ```
 
 ## Async I/O
@@ -321,29 +323,28 @@ const SaveData = struct {
     position_x: f32 = 0,
     position_y: f32 = 0,
 
-    fn save(self: *const SaveData, path: []const u8) !void {
-        const stream = try sdl3.io_stream.Stream.fromFile(path, "wb");
-        defer stream.close();
+    fn save(self: *const SaveData, path: [:0]const u8) !void {
+        const stream = try sdl3.io_stream.Stream.initFromFile(path, .write_binary);
+        defer stream.deinit();
 
-        try stream.writeU32(self.version, .little);
-        try stream.write(&self.player_name);
-        try stream.writeU32(self.score, .little);
-        try stream.writeU32(self.level, .little);
-        try stream.writeF32(self.position_x, .little);
-        try stream.writeF32(self.position_y, .little);
+        try stream.writeU32Le(self.version);
+        _ = try stream.write(&self.player_name);
+        try stream.writeU32Le(self.score);
+        try stream.writeU32Le(self.level);
+        // Note: For f32 you may need to use @bitCast and writeU32Le
+        // or write raw bytes: _ = try stream.write(std.mem.asBytes(&self.position_x));
     }
 
-    fn load(path: []const u8) !SaveData {
-        const stream = try sdl3.io_stream.Stream.fromFile(path, "rb");
-        defer stream.close();
+    fn load(path: [:0]const u8) !SaveData {
+        const stream = try sdl3.io_stream.Stream.initFromFile(path, .read_binary);
+        defer stream.deinit();
 
         var data: SaveData = undefined;
-        data.version = try stream.readU32(.little);
+        data.version = (try stream.readU32Le()) orelse return error.UnexpectedEof;
         _ = try stream.read(&data.player_name);
-        data.score = try stream.readU32(.little);
-        data.level = try stream.readU32(.little);
-        data.position_x = try stream.readF32(.little);
-        data.position_y = try stream.readF32(.little);
+        data.score = (try stream.readU32Le()) orelse return error.UnexpectedEof;
+        data.level = (try stream.readU32Le()) orelse return error.UnexpectedEof;
+        // For f32, read raw bytes or use @bitCast from u32
 
         return data;
     }
@@ -352,7 +353,9 @@ const SaveData = struct {
 // Usage
 var save = SaveData{ .score = 1000, .level = 5 };
 const pref_path = try sdl3.filesystem.getPrefPath("MyCompany", "MyGame");
-const save_path = try std.fmt.allocPrint(allocator, "{s}save.dat", .{pref_path});
+defer sdl3.free(pref_path.ptr);
+const save_path = try std.fmt.allocPrintZ(allocator, "{s}save.dat", .{pref_path});
+defer allocator.free(save_path);
 try save.save(save_path);
 ```
 

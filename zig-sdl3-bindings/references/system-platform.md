@@ -5,11 +5,7 @@
 ```zig
 const sdl3 = @import("sdl3");
 
-// Get platform name
-const platform = sdl3.platform.getName();
-// Returns: "Windows", "macOS", "Linux", "iOS", "Android", "Emscripten", etc.
-
-// Compile-time platform check
+// Compile-time platform checks (use constants, no getName() function)
 if (sdl3.platform.is_windows) {
     // Windows-specific code
 }
@@ -35,8 +31,8 @@ if (sdl3.platform.is_emscripten) {
 ```zig
 const sdl3 = @import("sdl3");
 
-// Get CPU count
-const cpu_count = sdl3.cpu_info.getCount();
+// Get CPU count (logical cores)
+const cpu_count = sdl3.cpu_info.getNumLogicalCores();
 std.debug.print("CPUs: {}\n", .{cpu_count});
 
 // Get CPU cache line size
@@ -84,19 +80,18 @@ if (sdl3.cpu_info.hasArmSimd()) {
 ```zig
 const sdl3 = @import("sdl3");
 
-// Get preferred locales
-var count: c_int = undefined;
-const locales = try sdl3.Locale.getPreferred(&count);
-defer sdl3.c.SDL_free(locales);
+// Get preferred locales (returns slice directly)
+const locales = try sdl3.locale.Locale.getPreferred();
+defer sdl3.free(locales.ptr);
 
-for (locales[0..@intCast(count)]) |locale| {
+for (locales) |locale| {
     const language = locale.language;  // e.g., "en"
     const country = locale.country;    // e.g., "US" (or null)
     std.debug.print("Locale: {s}-{?s}\n", .{language, country});
 }
 
 // Typically first locale is most preferred
-if (count > 0) {
+if (locales.len > 0) {
     const primary = locales[0];
     if (std.mem.eql(u8, primary.language, "ja")) {
         loadJapaneseTranslations();

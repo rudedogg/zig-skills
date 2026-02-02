@@ -43,13 +43,12 @@ if (sdl3.clipboard.hasPrimarySelectionText()) {
 ### Check Available Formats
 
 ```zig
-// Get available MIME types
-var num_types: usize = undefined;
-const mime_types = try sdl3.clipboard.getMimeTypes(&num_types);
-defer sdl3.c.SDL_free(mime_types);
+// Get available MIME types (returns slice directly)
+const mime_types = try sdl3.clipboard.getMimeTypes();
+defer sdl3.free(mime_types.ptr);
 
-for (mime_types[0..num_types]) |mime_type| {
-    std.debug.print("Available: {s}\n", .{mime_type});
+for (mime_types) |mime_type| {
+    std.debug.print("Available: {s}\n", .{std.mem.sliceTo(mime_type, 0)});
 }
 
 // Check for specific type
@@ -61,14 +60,12 @@ if (sdl3.clipboard.hasData("image/png")) {
 ### Get Data
 
 ```zig
-// Get clipboard data by MIME type
-var size: usize = undefined;
-if (sdl3.clipboard.getData("image/png", &size)) |data| {
-    defer sdl3.c.SDL_free(data);
+// Get clipboard data by MIME type (returns sized slice)
+const data = try sdl3.clipboard.getData("image/png");
+defer sdl3.free(data.ptr);
 
-    // Use PNG data (data[0..size])
-    savePngFile(data[0..size]);
-}
+// Use PNG data
+savePngFile(data);
 ```
 
 ### Set Data with Callback

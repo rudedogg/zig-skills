@@ -173,7 +173,7 @@ if (sem.waitTimeout(1000)) {
 }
 
 // Release (increment count)
-try sem.post();
+try sem.signal();
 
 // Get current count
 const count = sem.getValue();
@@ -248,7 +248,7 @@ condition.signal();
 const sdl3 = @import("sdl3");
 
 // Atomic operations
-var counter = sdl3.atomic.AtomicInt.init(0);
+var counter = sdl3.atomic.Int.init(0);
 
 // Atomic add
 const old = counter.add(1);

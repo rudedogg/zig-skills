@@ -90,21 +90,23 @@ For continuous input without events:
 const sdl3 = @import("sdl3");
 
 fn update() void {
-    // Get current mouse state
+    // Get current mouse state (returns struct { ButtonFlags, f32, f32 })
     const state = sdl3.mouse.getState();
+    const buttons = state[0];
+    const x = state[1];
+    const y = state[2];
 
-    const x = state.x;
-    const y = state.y;
-
-    if (state.buttons.left) {
+    if (buttons.left) {
         // Left button held
     }
-    if (state.buttons.right) {
+    if (buttons.right) {
         // Right button held
     }
 
     // Global mouse position (screen coordinates)
     const global = sdl3.mouse.getGlobalState();
+    const global_x = global[1];
+    const global_y = global[2];
 }
 ```
 
@@ -209,13 +211,13 @@ try sdl3.mouse.setCursor(cursor);
 
 ```zig
 // Hide cursor
-try sdl3.mouse.hideCursor();
+try sdl3.mouse.Cursor.hide();
 
 // Show cursor
-try sdl3.mouse.showCursor();
+try sdl3.mouse.Cursor.show();
 
 // Check visibility
-if (sdl3.mouse.isCursorVisible()) {
+if (sdl3.mouse.Cursor.visible()) {
     // Cursor shown
 }
 ```
@@ -224,10 +226,10 @@ if (sdl3.mouse.isCursorVisible()) {
 
 ```zig
 // Get default cursor
-const default = sdl3.mouse.getDefaultCursor();
+const default = try sdl3.mouse.Cursor.getDefault();
 
 // Reset to default
-try sdl3.mouse.setCursor(default);
+try sdl3.mouse.Cursor.set(default);
 ```
 
 ## Mouse Position
@@ -253,8 +255,8 @@ const screen_y = global.y;
 ### Warp Mouse
 
 ```zig
-// Move mouse to position in window
-try sdl3.mouse.warpInWindow(window, 400, 300);
+// Move mouse to position in window (no error return)
+sdl3.mouse.warpInWindow(window, 400, 300);
 
 // Move mouse to global screen position
 try sdl3.mouse.warpGlobal(1000, 500);
@@ -291,14 +293,14 @@ while (sdl3.events.poll()) |event| {
     }
 }
 
-// List connected mice
-var count: c_int = undefined;
-const mice = try sdl3.mouse.getMice(&count);
-defer sdl3.c.SDL_free(mice);
+// List connected mice (returns []Id slice directly)
+const mice = try sdl3.mouse.getMice();
+defer sdl3.free(mice.ptr);
 
-for (mice[0..@intCast(count)]) |mouse_id| {
-    const name = try sdl3.mouse.getName(mouse_id);
-    std.debug.print("Mouse: {s}\n", .{name});
+for (mice) |mouse_id| {
+    if (mouse_id.getName()) |name| {
+        std.debug.print("Mouse: {s}\n", .{name});
+    } else |_| {}
 }
 ```
 

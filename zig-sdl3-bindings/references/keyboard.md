@@ -287,8 +287,11 @@ const scancode = sdl3.Scancode.fromName("W");  // .w
 const key_name = sdl3.keycode.getName(.space);  // "Space"
 
 // Convert between scancode and keycode
-const keycode = sdl3.keyboard.getKeyFromScancode(.w, .none, false);
-const scancode = sdl3.keyboard.getScancodeFromKey(.a, null);
+const keycode = sdl3.keyboard.getKeyFromScancode(.w, .{}, false);
+if (sdl3.keyboard.getScancodeFromKey(.a)) |result| {
+    const sc = result[0];   // ?Scancode
+    const mod = result[1];  // KeyModifier
+}
 ```
 
 ## Keyboard Focus
@@ -331,14 +334,14 @@ while (sdl3.events.poll()) |event| {
     }
 }
 
-// List connected keyboards
-var count: c_int = undefined;
-const keyboards = try sdl3.keyboard.getKeyboards(&count);
-defer sdl3.c.SDL_free(keyboards);
+// List connected keyboards (returns []Id slice directly)
+const keyboards = try sdl3.keyboard.getKeyboards();
+defer sdl3.free(keyboards.ptr);
 
-for (keyboards[0..@intCast(count)]) |keyboard_id| {
-    const name = try sdl3.keyboard.getName(keyboard_id);
-    std.debug.print("Keyboard: {s}\n", .{name});
+for (keyboards) |keyboard_id| {
+    if (keyboard_id.getName()) |name| {
+        std.debug.print("Keyboard: {s}\n", .{name});
+    } else |_| {}
 }
 ```
 

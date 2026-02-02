@@ -58,16 +58,18 @@ const window = try sdl3.video.Window.init("Game", 1920, 1080, .{
 For advanced configuration:
 
 ```zig
-const props = try sdl3.properties.Group.init();
+// Use CreateProperties struct (returns window and property group)
+const result = try sdl3.video.Window.initWithProperties(.{
+    .title = "Advanced Window",
+    .width = 1280,
+    .height = 720,
+    .x = .{ .absolute = 100 },
+    .y = .{ .absolute = 100 },
+    .resizable = true,
+});
+const window = result[0];
+const props = result[1];
 defer props.deinit();
-
-try props.set("title", .{ .string = "Advanced Window" });
-try props.set("width", .{ .number = 1280 });
-try props.set("height", .{ .number = 720 });
-try props.set("x", .{ .number = 100 });
-try props.set("y", .{ .number = 100 });
-
-const window = try sdl3.video.Window.initWithProperties(props);
 defer window.deinit();
 ```
 
@@ -94,8 +96,8 @@ try window.setPosition(100, 100);
 
 // Center on screen
 try window.setPosition(
-    sdl3.video.Window.pos_centered,
-    sdl3.video.Window.pos_centered,
+    .{ .centered = null },  // x: center on primary display
+    .{ .centered = null },  // y: center on primary display
 );
 
 // Minimize/maximize
@@ -451,8 +453,9 @@ if (sdl3.video.isScreenSaverEnabled()) {
 ## VSync
 
 ```zig
-// When creating renderer
-const renderer = try sdl3.render.Renderer.init(window, .{
+// When creating renderer with VSync, use initWithProperties
+const renderer = try sdl3.render.Renderer.initWithProperties(.{
+    .window = .{ .value = window },
     .present_vsync = .{ .value = .adaptive },  // Adaptive VSync
 });
 

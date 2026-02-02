@@ -25,8 +25,8 @@ for (addresses.items) |addr| {
     std.debug.print("Address: {}\n", .{addr});
 }
 
-// Create address directly
-const addr = try sdl3.net.Address.init("192.168.1.1", 8080);
+// Create address directly (host only, no port)
+const addr = try sdl3.net.Address.init("192.168.1.1");
 ```
 
 ## TCP Client
@@ -36,20 +36,20 @@ const sdl3 = @import("sdl3");
 
 pub fn main() !void {
     // Resolve server address
-    const addr = try sdl3.net.Address.init("example.com", 80);
+    const addr = try sdl3.net.Address.init("example.com");
 
-    // Connect
-    const socket = try sdl3.net.StreamSocket.init(addr);
+    // Connect (pass address and port separately)
+    const socket = try sdl3.net.StreamSocket.initClient(addr, 80);
     defer socket.deinit();
 
-    // Send request
+    // Send request (use write() not send())
     const request = "GET / HTTP/1.0\r\nHost: example.com\r\n\r\n";
-    try socket.send(request);
+    _ = try socket.write(request);
 
-    // Receive response
+    // Receive response (use read() not recv())
     var buffer: [4096]u8 = undefined;
     while (true) {
-        const bytes = socket.recv(&buffer) catch break;
+        const bytes = socket.read(&buffer) catch break;
         if (bytes == 0) break;
         std.debug.print("{s}", .{buffer[0..bytes]});
     }
@@ -134,16 +134,17 @@ const sdl3 = @import("sdl3");
 const socket = try sdl3.net.DatagramSocket.init(null, 9999);  // Bind to port 9999
 defer socket.deinit();
 
-// Send packet
-const dest = try sdl3.net.Address.init("192.168.1.100", 9999);
-try socket.send(dest, "Hello!");
+// Send packet (address, port, and data as separate params)
+const dest = try sdl3.net.Address.init("192.168.1.100");
+try socket.send(dest, 9999, "Hello!");
 
-// Receive packet
+// Receive packet (returns ?Datagram)
 var buffer: [1024]u8 = undefined;
-if (socket.recv(&buffer)) |result| {
-    const data = buffer[0..result.bytes];
-    const from = result.address;
-    std.debug.print("From {}: {s}\n", .{from, data});
+if (socket.receive(&buffer)) |datagram| {
+    const data = datagram.getData();
+    const from_addr = datagram.address;
+    const from_port = datagram.port;
+    std.debug.print("From {}:{}: {s}\n", .{from_addr, from_port, data});
 }
 ```
 

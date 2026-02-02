@@ -13,8 +13,8 @@ pub fn main() !void {
     defer sdl3.quit(.{ .video = true, .camera = true });
 
     // Open default camera
-    const camera = try sdl3.camera.Camera.open(.default, null);
-    defer camera.close();
+    const camera = try sdl3.camera.Camera.init(.default, null);
+    defer camera.deinit();
 
     // Wait for permission
     var permitted = false;
@@ -49,16 +49,19 @@ pub fn main() !void {
             }
         }
 
-        // Get camera frame
-        if (camera.acquireFrame()) |frame| {
+        // Get camera frame (returns tuple { ?Surface, ?u64 })
+        const frame_result = camera.acquireFrame();
+        if (frame_result[0]) |frame| {
             defer camera.releaseFrame(frame);
+            const timestamp = frame_result[1];  // Optional timestamp
+            _ = timestamp;
 
             // Convert frame to texture
             const texture = try renderer.createTextureFromSurface(frame);
             defer texture.deinit();
 
-            try renderer.clear();
-            try renderer.copy(texture, null, null);
+            try renderer.renderClear();
+            try renderer.renderTexture(texture, null, null);
             try renderer.present();
         }
     }
@@ -68,21 +71,19 @@ pub fn main() !void {
 ## Listing Cameras
 
 ```zig
-// Get available cameras
-var count: c_int = undefined;
-const cameras = try sdl3.camera.getCameras(&count);
-defer sdl3.c.SDL_free(cameras);
+// Get available cameras (returns slice directly)
+const cameras = try sdl3.camera.getCameras();
+defer sdl3.free(cameras.ptr);
 
-for (cameras[0..@intCast(count)]) |camera_id| {
-    const name = try sdl3.camera.Camera.getName(camera_id);
+for (cameras) |camera_id| {
+    const name = try camera_id.getName();
     std.debug.print("Camera: {s}\n", .{name});
 
-    // Get supported formats
-    var format_count: c_int = undefined;
-    const formats = try sdl3.camera.Camera.getSupportedFormats(camera_id, &format_count);
-    defer sdl3.c.SDL_free(formats);
+    // Get supported formats (takes allocator)
+    const formats = try camera_id.getSupportedFormats(allocator);
+    defer allocator.free(formats);
 
-    for (formats[0..@intCast(format_count)]) |spec| {
+    for (formats) |spec| {
         std.debug.print("  {}x{} @ {} - {}\n", .{
             spec.width,
             spec.height,
@@ -106,8 +107,8 @@ const desired_spec = sdl3.camera.Spec{
     .framerate_denominator = 1,
 };
 
-const camera = try sdl3.camera.Camera.open(camera_id, &desired_spec);
-defer camera.close();
+const camera = try sdl3.camera.Camera.init(camera_id, &desired_spec);
+defer camera.deinit();
 
 // Check actual format (may differ from requested)
 const actual_spec = camera.getFormat();
@@ -119,8 +120,8 @@ std.debug.print("Actual: {}x{}\n", .{actual_spec.width, actual_spec.height});
 Camera access requires user permission on most platforms:
 
 ```zig
-const camera = try sdl3.camera.Camera.open(camera_id, null);
-defer camera.close();
+const camera = try sdl3.camera.Camera.init(camera_id, null);
+defer camera.deinit();
 
 // Check permission state
 switch (camera.getPermissionState()) {

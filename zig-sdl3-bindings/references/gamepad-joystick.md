@@ -21,7 +21,7 @@ while (sdl3.events.poll()) |event| {
     switch (event) {
         .gamepad_added => |g| {
             // New controller connected
-            const gamepad = try sdl3.gamepad.Gamepad.open(g.which);
+            const gamepad = try sdl3.gamepad.Gamepad.init(g.which);
             const name = try gamepad.getName();
             std.debug.print("Gamepad connected: {s}\n", .{name});
         },
@@ -29,7 +29,7 @@ while (sdl3.events.poll()) |event| {
         .gamepad_removed => |g| {
             // Controller disconnected
             if (getGamepadById(g.which)) |gamepad| {
-                gamepad.close();
+                gamepad.deinit();
             }
         },
 
@@ -181,8 +181,8 @@ try gamepad.rumble(0, 0, 0);
 ### LED Color (PS4/PS5)
 
 ```zig
-try gamepad.setLed(.{ .r = 255, .g = 0, .b = 0 });  // Red
-try gamepad.setLed(.{ .r = 0, .g = 255, .b = 0 });  // Green
+try gamepad.setLed(255, 0, 0);  // Red
+try gamepad.setLed(0, 255, 0);  // Green
 ```
 
 ### Touchpad (PS4/PS5)
@@ -194,13 +194,12 @@ const num_touchpads = gamepad.getNumTouchpads();
 // Get touchpad fingers
 const num_fingers = gamepad.getNumTouchpadFingers(0);
 
-// Get finger state
-if (gamepad.getTouchpadFinger(0, 0)) |finger| {
-    if (finger.down) {
-        const x = finger.x;  // 0.0 to 1.0
-        const y = finger.y;  // 0.0 to 1.0
-        const pressure = finger.pressure;
-    }
+// Get finger state (returns struct directly, can error)
+const finger = try gamepad.getTouchpadFinger(0, 0);
+if (finger.down) {
+    const x = finger.x;  // 0.0 to 1.0
+    const y = finger.y;  // 0.0 to 1.0
+    const pressure = finger.pressure;
 }
 
 // Touchpad events
@@ -224,12 +223,12 @@ if (gamepad.hasSensor(.gyro)) {
     try gamepad.setSensorEnabled(.gyro, true);
 }
 
-// Read sensor data
-if (gamepad.getSensorData(.gyro)) |data| {
-    const pitch_rate = data[0];  // rad/s
-    const yaw_rate = data[1];
-    const roll_rate = data[2];
-}
+// Read sensor data (writes to provided buffer)
+var data: [3]f32 = undefined;
+try gamepad.getSensorData(.gyro, &data);
+const pitch_rate = data[0];  // rad/s
+const yaw_rate = data[1];
+const roll_rate = data[2];
 
 // Sensor events
 .gamepad_sensor_update => |s| {
@@ -258,9 +257,10 @@ switch (type) {
     else => {},
 }
 
-// Battery info
-const power = gamepad.getPowerInfo();
-if (power.percent) |pct| {
+// Battery info (returns tuple { PowerState, ?u7 })
+const power = try gamepad.getPowerInfo();
+const state = power[0];    // power.PowerState enum
+if (power[1]) |pct| {      // ?u7 percent
     std.debug.print("Battery: {}%\n", .{pct});
 }
 ```
@@ -278,7 +278,7 @@ defer sdl3.quit(.{ .joystick = true });
 
 // Open joystick
 .joystick_added => |j| {
-    const joystick = try sdl3.joystick.Joystick.open(j.which);
+    const joystick = try sdl3.joystick.Joystick.init(j.which);
 
     const name = try joystick.getName();
     const num_axes = joystick.getNumAxes();
@@ -330,8 +330,8 @@ defer haptic.deinit();
 
 // Simple rumble
 if (haptic.rumbleSupported()) {
-    try haptic.rumbleInit();
-    try haptic.rumblePlay(0.75, 500);  // 75% strength, 500ms
+    try haptic.initRumble();
+    try haptic.playRumble(0.75, 500);  // 75% strength, 500ms
 }
 
 // Custom effect
@@ -379,11 +379,11 @@ fn assignGamepad(gamepad: sdl3.gamepad.Gamepad) void {
     }
 }
 
-fn removeGamepad(instance_id: sdl3.joystick.ID) void {
+fn removeGamepad(instance_id: sdl3.joystick.Id) void {
     for (&player_gamepads) |*slot| {
         if (slot.*) |gp| {
             if (gp.getInstanceId() == instance_id) {
-                gp.close();
+                gp.deinit();
                 slot.* = null;
                 return;
             }

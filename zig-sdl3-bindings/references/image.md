@@ -22,7 +22,7 @@ const sdl3_dep = b.dependency("sdl3", .{
 const sdl3 = @import("sdl3");
 
 // Load image as surface
-const surface = try sdl3.image.load("sprite.png");
+const surface = try sdl3.image.loadFile("sprite.png");
 defer surface.deinit();
 
 // Convert to texture for rendering
@@ -30,28 +30,20 @@ const texture = try renderer.createTextureFromSurface(surface);
 defer texture.deinit();
 ```
 
-### Load from Memory
-
-```zig
-// Load from memory buffer
-const image_data: []const u8 = readFileContents("sprite.png");
-const surface = try sdl3.image.loadFromMem(image_data);
-defer surface.deinit();
-```
-
 ### Load from IO Stream
 
 ```zig
 const io = try sdl3.io_stream.Stream.fromFile("sprite.png", "rb");
-const surface = try sdl3.image.loadFromIo(io, true);  // true = close IO on completion
+const surface = try sdl3.image.loadIo(io, true);  // true = close IO on completion
 defer surface.deinit();
 ```
 
 ### Load with Type Hint
 
 ```zig
-// When file extension doesn't match content
-const surface = try sdl3.image.loadTyped("data.bin", "PNG");
+// When file extension doesn't match content (via IO stream)
+const io = try sdl3.io_stream.Stream.fromFile("data.bin", "rb");
+const surface = try sdl3.image.loadTypedIo(io, true, "PNG");
 defer surface.deinit();
 ```
 
@@ -74,61 +66,69 @@ defer surface.deinit();
 - **LBM** - Interleaved Bitmap
 - **SVG** - Scalable Vector Graphics (simple)
 
-## Check Format Support
+## Check Format of IO Stream
 
 ```zig
-// Check if format is supported
-if (sdl3.image.isAvif()) {
-    // AVIF loading available
+// Check if IO stream contains specific format (takes io_stream.Stream)
+const io = try sdl3.io_stream.Stream.fromFile("image.dat", "rb");
+defer io.deinit();
+
+if (sdl3.image.isAvif(io)) {
+    // This is AVIF data
 }
-if (sdl3.image.isJxl()) {
-    // JPEG XL available
+if (sdl3.image.isJxl(io)) {
+    // This is JPEG XL data
 }
-if (sdl3.image.isPng()) {
-    // PNG available (always true with ext_image)
+if (sdl3.image.isPng(io)) {
+    // This is PNG data
 }
-if (sdl3.image.isWebp()) {
-    // WebP available
+if (sdl3.image.isWebp(io)) {
+    // This is WebP data
 }
 ```
 
 ## Animation Support
 
-SDL_image can load animated GIFs:
+SDL_image can load animated GIFs and WebP:
 
 ```zig
 // Load animated image
-var anim = try sdl3.image.loadAnimation("animation.gif");
-defer sdl3.image.freeAnimation(anim);
+var anim = try sdl3.image.Animation.init("animation.gif");
+defer anim.deinit();
 
-// Get frames
-const num_frames = anim.count;
-const frames = anim.frames[0..num_frames];
-const delays = anim.delays[0..num_frames];  // Delay per frame in ms
+// Get frame count and dimensions
+const num_frames = anim.getNumFrames();
+const width = anim.getWidth();
+const height = anim.getHeight();
 
 // Render animation
 var frame_index: usize = 0;
-var frame_timer: u32 = 0;
+var frame_timer: usize = 0;
 
-fn updateAnimation(dt_ms: u32) void {
-    frame_timer += dt_ms;
-    while (frame_timer >= delays[frame_index]) {
-        frame_timer -= delays[frame_index];
-        frame_index = (frame_index + 1) % num_frames;
+fn updateAnimation(anim: sdl3.image.Animation, dt_ms: usize) void {
+    if (anim.getFrame(frame_index)) |frame| {
+        const delay = frame[1];  // delay in ms
+        frame_timer += dt_ms;
+        while (frame_timer >= delay) {
+            frame_timer -= delay;
+            frame_index = (frame_index + 1) % anim.getNumFrames();
+        }
     }
 }
 
-fn renderAnimation(renderer: sdl3.render.Renderer, x: f32, y: f32) !void {
-    const frame_surface = frames[frame_index];
-    const texture = try renderer.createTextureFromSurface(frame_surface);
-    defer texture.deinit();
+fn renderAnimation(anim: sdl3.image.Animation, renderer: sdl3.render.Renderer, x: f32, y: f32) !void {
+    if (anim.getFrame(frame_index)) |frame| {
+        const frame_surface = frame[0];  // surface.Surface
+        const texture = try renderer.createTextureFromSurface(frame_surface);
+        defer texture.deinit();
 
-    try renderer.copy(texture, null, .{
-        .x = x,
-        .y = y,
-        .w = @floatFromInt(frame_surface.getWidth()),
-        .h = @floatFromInt(frame_surface.getHeight()),
-    });
+        try renderer.renderTexture(texture, null, .{
+            .x = x,
+            .y = y,
+            .w = @floatFromInt(frame_surface.getWidth()),
+            .h = @floatFromInt(frame_surface.getHeight()),
+        });
+    }
 }
 ```
 
@@ -151,11 +151,10 @@ try sdl3.image.saveJpg(surface, "photo.jpg", 85);
 const texture = try sdl3.image.loadTexture(renderer, "sprite.png");
 defer texture.deinit();
 
-// From memory
-const texture = try sdl3.image.loadTextureFromMem(renderer, image_data);
-
-// From IO
-const texture = try sdl3.image.loadTextureFromIo(renderer, io, true);
+// From IO stream
+const io = try sdl3.io_stream.Stream.fromFile("sprite.png", "rb");
+const texture = try sdl3.image.loadTextureIo(renderer, io, true);
+defer texture.deinit();
 ```
 
 ## Sprite Sheet Example
@@ -199,7 +198,7 @@ const SpriteSheet = struct {
 
     fn draw(self: SpriteSheet, renderer: sdl3.render.Renderer, frame: u32, x: f32, y: f32) !void {
         const src = self.getSourceRect(frame);
-        try renderer.copy(self.texture, src, .{
+        try renderer.renderTexture(self.texture, src, .{
             .x = x,
             .y = y,
             .w = @floatFromInt(self.frame_width),

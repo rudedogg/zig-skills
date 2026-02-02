@@ -254,7 +254,7 @@ fn iterate(state: *AppState) !sdl3.AppResult {
 
     // Draw player
     try state.renderer.setDrawColor(.{ .r = 255, .g = 100, .b = 100, .a = 255 });
-    try state.renderer.fillRect(.{
+    try state.renderer.renderFillRect(.{
         .x = state.player_x - 25,
         .y = state.player_y - 25,
         .w = 50,

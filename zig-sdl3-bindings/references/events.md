@@ -28,14 +28,15 @@ while (running) {
 ### Wait for Events
 
 ```zig
-// Block until event arrives
-if (sdl3.events.wait()) |event| {
-    // Handle event
-}
+// Block until event arrives (wait() just waits, waitAndPop() returns event)
+const event = try sdl3.events.waitAndPop();
+// Handle event
 
-// Wait with timeout (milliseconds)
-if (sdl3.events.waitTimeout(1000)) |event| {
-    // Handle event (or null if timeout)
+// Wait with timeout (milliseconds) - returns ?Event
+if (sdl3.events.waitAndPopTimeout(1000)) |event| {
+    // Handle event
+} else {
+    // Timeout occurred
 }
 ```
 
@@ -464,8 +465,8 @@ sdl3.events.removeWatch(void, eventWatcher, null);
 ## Pushing Custom Events
 
 ```zig
-// Register custom event type
-const custom_type = try sdl3.events.register();
+// Register custom event type (pass number of events to register)
+const custom_type = sdl3.events.register(1) orelse return error.NoEventsAvailable;
 
 // Push custom event
 var custom_event = sdl3.events.Event{
@@ -479,7 +480,7 @@ var custom_event = sdl3.events.Event{
         .data2 = null,
     },
 };
-try sdl3.events.push(&custom_event);
+try sdl3.events.push(custom_event);
 
 // Handle custom event
 while (sdl3.events.poll()) |event| {

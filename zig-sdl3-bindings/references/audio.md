@@ -14,25 +14,26 @@ pub fn main() !void {
     try sdl3.init(.{ .audio = true });
     defer sdl3.quit(.{ .audio = true });
 
-    // Load WAV file
-    var spec: sdl3.audio.Spec = undefined;
-    const wav_data = try sdl3.audio.loadWav("sound.wav", &spec);
-    defer sdl3.audio.freeWav(wav_data);
+    // Load WAV file (returns struct { Spec, []u8 })
+    const result = try sdl3.audio.loadWav("sound.wav");
+    const spec = result[0];
+    const wav_data = result[1];
+    defer sdl3.free(wav_data.ptr);  // Free with sdl3.free()
 
     // Open default playback device with simplified API
-    const stream = try sdl3.audio.Device.openStream(
-        .default_playback,  // Use default output device
-        &spec,              // Match WAV format
-        null,               // No callback (push audio)
-        null,               // No user data
+    const stream = try sdl3.audio.Device.default_playback.openStream(
+        spec,   // Match WAV format
+        void,   // No callback user data type
+        null,   // No callback (push audio)
+        null,   // No user data
     );
     defer stream.deinit();  // Also closes device
 
     // Queue audio data
-    try stream.put(wav_data);
+    try stream.putData(wav_data);
 
     // Resume playback (streams start paused)
-    try stream.resume();
+    try stream.resumeDevice();
 
     // Wait for playback to finish
     while (stream.getQueued() > 0) {
@@ -65,23 +66,21 @@ const spec = sdl3.audio.Spec{
 ### Listing Devices
 
 ```zig
-// Get playback devices
-var playback_count: c_int = undefined;
-const playback_ids = try sdl3.audio.getPlaybackDevices(&playback_count);
-defer sdl3.c.SDL_free(playback_ids);
+// Get playback devices (returns []Device slice)
+const playback_devices = try sdl3.audio.getPlaybackDevices();
+defer sdl3.free(playback_devices.ptr);
 
-for (playback_ids[0..@intCast(playback_count)]) |device_id| {
-    const name = try sdl3.audio.Device.getName(device_id);
+for (playback_devices) |device| {
+    const name = try device.getName();
     std.debug.print("Playback: {s}\n", .{name});
 }
 
 // Get recording devices
-var recording_count: c_int = undefined;
-const recording_ids = try sdl3.audio.getRecordingDevices(&recording_count);
-defer sdl3.c.SDL_free(recording_ids);
+const recording_devices = try sdl3.audio.getRecordingDevices();
+defer sdl3.free(recording_devices.ptr);
 
-for (recording_ids[0..@intCast(recording_count)]) |device_id| {
-    const name = try sdl3.audio.Device.getName(device_id);
+for (recording_devices) |device| {
+    const name = try device.getName();
     std.debug.print("Recording: {s}\n", .{name});
 }
 ```
@@ -89,12 +88,12 @@ for (recording_ids[0..@intCast(recording_count)]) |device_id| {
 ### Opening a Specific Device
 
 ```zig
-// Open specific device
-const device = try sdl3.audio.Device.open(device_id, &desired_spec);
+// Open specific device (device.open creates a logical device)
+const device = try device_id.open(desired_spec);
 defer device.close();
 
 // Create stream for the device
-const stream = try sdl3.audio.Stream.init(&source_spec, &device_spec);
+const stream = try sdl3.audio.Stream.init(source_spec, device_spec);
 defer stream.deinit();
 
 // Bind stream to device
@@ -154,7 +153,7 @@ const dest_spec = sdl3.audio.Spec{
 };
 
 // Stream converts from source to dest format
-const stream = try sdl3.audio.Stream.init(&source_spec, &dest_spec);
+const stream = try sdl3.audio.Stream.init(source_spec, dest_spec);
 defer stream.deinit();
 ```
 
@@ -162,10 +161,10 @@ defer stream.deinit();
 
 ```zig
 // Push audio data into stream (for playback)
-try stream.put(audio_buffer);
+try stream.putData(audio_buffer);
 
 // Get converted audio data (for recording)
-const data = try stream.get(output_buffer);
+const data = try stream.getData(output_buffer);
 const bytes_read = data.len;
 
 // Check queued data

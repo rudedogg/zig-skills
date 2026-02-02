@@ -22,18 +22,18 @@ const sdl3_dep = b.dependency("sdl3", .{
 const sdl3 = @import("sdl3");
 
 // Load font at specific point size
-const font = try sdl3.ttf.Font.open("assets/font.ttf", 24);
-defer font.close();
+const font = try sdl3.ttf.Font.init("assets/font.ttf", 24);
+defer font.deinit();
 
 // Load with specific face index (for fonts with multiple faces)
-const font = try sdl3.ttf.Font.openIndex("font.ttc", 24, 0);
+const font = try sdl3.ttf.Font.initWithIndex("font.ttc", 24, 0);
 ```
 
 ### Rendering Text
 
 ```zig
 // Render text to surface (solid - fastest, no antialiasing background)
-const surface = try font.renderSolid("Hello World!", .{ .r = 255, .g = 255, .b = 255, .a = 255 });
+const surface = try font.renderTextSolid("Hello World!", .{ .r = 255, .g = 255, .b = 255, .a = 255 });
 defer surface.deinit();
 
 // Convert to texture
@@ -42,7 +42,7 @@ defer texture.deinit();
 
 // Draw
 const props = try texture.getProperties();
-try renderer.copy(texture, null, .{
+try renderer.renderTexture(texture, null, .{
     .x = 100,
     .y = 100,
     .w = @floatFromInt(props.width.?),
@@ -54,26 +54,26 @@ try renderer.copy(texture, null, .{
 
 ```zig
 // Solid - Fast, no antialiasing background (good for UI)
-const surface = try font.renderSolid("Text", fg_color);
+const surface = try font.renderTextSolid("Text", fg_color);
 
 // Shaded - Antialiased text with background color
-const surface = try font.renderShaded("Text", fg_color, bg_color);
+const surface = try font.renderTextShaded("Text", fg_color, bg_color);
 
 // Blended - Antialiased text with transparent background (best quality)
-const surface = try font.renderBlended("Text", fg_color);
+const surface = try font.renderTextBlended("Text", fg_color);
 
 // LCD - Subpixel rendering (for LCD displays)
-const surface = try font.renderLcd("Text", fg_color, bg_color);
+const surface = try font.renderTextLcd("Text", fg_color, bg_color);
 ```
 
 ### UTF-8 and Unicode
 
 ```zig
 // All render functions accept UTF-8 strings
-const surface = try font.renderBlended("Hello 世界! 🎮", white);
+const surface = try font.renderTextBlended("Hello 世界! 🎮", white);
 
-// Render single glyph
-const glyph_surface = try font.renderGlyph('A', white);
+// Render single glyph (takes u32 codepoint)
+const glyph_surface = try font.renderGlyphBlended('A', white);
 ```
 
 ## Font Properties
@@ -93,28 +93,27 @@ const descent = font.getDescent();
 // Get recommended line skip
 const line_skip = font.getLineSkip();
 
-// Get glyph metrics
-if (font.getGlyphMetrics('W')) |metrics| {
-    const min_x = metrics.min_x;
-    const max_x = metrics.max_x;
-    const min_y = metrics.min_y;
-    const max_y = metrics.max_y;
-    const advance = metrics.advance;
-}
+// Get glyph metrics (returns struct directly, can error)
+const metrics = try font.getGlyphMetrics('W');
+const min_x = metrics.minx;
+const max_x = metrics.maxx;
+const min_y = metrics.miny;
+const max_y = metrics.maxy;
+const advance = metrics.advance;
 ```
 
 ### Text Size Calculation
 
 ```zig
-// Get size of rendered text
-const size = try font.sizeText("Hello World!");
-const width = size.width;
-const height = size.height;
+// Get size of rendered text (returns tuple { c_int, c_int })
+const size = try font.getStringSize("Hello World!");
+const width = size[0];
+const height = size[1];
 
-// Measure how much text fits in width
-const extent = try font.measureText("Long text...", max_width);
-const extent_count = extent.count;  // Characters that fit
-const extent_width = extent.extent; // Actual pixel width
+// Measure how much text fits in width (returns tuple { c_int, usize })
+const extent = try font.measureString("Long text...", max_width);
+const measured_width = extent[0];   // Actual pixel width
+const measured_length = extent[1];  // Bytes that fit
 ```
 
 ### Font Style
@@ -174,7 +173,7 @@ const TextCache = struct {
         }
 
         // Render new text
-        const surface = try self.font.renderBlended(text, color);
+        const surface = try self.font.renderTextBlended(text, color);
         defer surface.deinit();
 
         const texture = try self.renderer.createTextureFromSurface(surface);
@@ -192,7 +191,7 @@ const TextCache = struct {
 
     fn draw(self: *TextCache, text: []const u8, x: f32, y: f32, color: sdl3.pixels.Color) !void {
         const cached = try self.render(text, color);
-        try self.renderer.copy(cached.texture, null, .{
+        try self.renderer.renderTexture(cached.texture, null, .{
             .x = x,
             .y = y,
             .w = @floatFromInt(cached.width),
@@ -213,8 +212,8 @@ const TextCache = struct {
 ### Word Wrapping
 
 ```zig
-fn renderWrapped(font: sdl3.ttf.Font, text: []const u8, max_width: u32, color: sdl3.pixels.Color) !sdl3.surface.Surface {
-    return font.renderBlendedWrapped(text, color, max_width);
+fn renderWrapped(font: sdl3.ttf.Font, text: []const u8, max_width: c_int, color: sdl3.pixels.Color) !sdl3.surface.Surface {
+    return font.renderTextBlendedWrapped(text, color, max_width);
 }
 
 // Or manual wrapping
@@ -230,9 +229,9 @@ fn wrapText(font: sdl3.ttf.Font, text: []const u8, max_width: u32, allocator: st
         else
             word;
 
-        const size = try font.sizeText(test_line);
+        const size = try font.getStringSize(test_line);
 
-        if (size.width > max_width and current_line.items.len > 0) {
+        if (size[0] > max_width and current_line.items.len > 0) {
             // Start new line
             try lines.append(try current_line.toOwnedSlice());
             current_line.clearRetainingCapacity();
@@ -273,13 +272,13 @@ fn renderMultiline(
             continue;
         }
 
-        const surface = try font.renderBlended(line, color);
+        const surface = try font.renderTextBlended(line, color);
         defer surface.deinit();
 
         const texture = try renderer.createTextureFromSurface(surface);
         defer texture.deinit();
 
-        try renderer.copy(texture, null, .{
+        try renderer.renderTexture(texture, null, .{
             .x = x,
             .y = current_y,
             .w = @floatFromInt(surface.getWidth()),
@@ -306,7 +305,7 @@ fn drawAligned(
     alignment: Alignment,
     color: sdl3.pixels.Color,
 ) !void {
-    const surface = try font.renderBlended(text, color);
+    const surface = try font.renderTextBlended(text, color);
     defer surface.deinit();
 
     const texture = try renderer.createTextureFromSurface(surface);
@@ -321,7 +320,7 @@ fn drawAligned(
         .right => x + width - text_width,
     };
 
-    try renderer.copy(texture, null, .{
+    try renderer.renderTexture(texture, null, .{
         .x = draw_x,
         .y = y,
         .w = text_width,
@@ -337,12 +336,12 @@ fn drawAligned(
 try font.setOutline(2);  // 2 pixel outline
 
 // Render with outline
-const outline_surface = try font.renderBlended("Outlined", .{ .r = 0, .g = 0, .b = 0, .a = 255 });
+const outline_surface = try font.renderTextBlended("Outlined", .{ .r = 0, .g = 0, .b = 0, .a = 255 });
 defer outline_surface.deinit();
 
 // Reset for normal text
 try font.setOutline(0);
-const text_surface = try font.renderBlended("Outlined", .{ .r = 255, .g = 255, .b = 255, .a = 255 });
+const text_surface = try font.renderTextBlended("Outlined", .{ .r = 255, .g = 255, .b = 255, .a = 255 });
 
 // Composite them
 // (blit outline first, then text on top)

@@ -8,26 +8,26 @@ SDL3's Storage API provides a high-level abstraction for platform-specific stora
 const sdl3 = @import("sdl3");
 
 // Open title storage (game data bundled with app)
-const storage = try sdl3.storage.Storage.openTitle(null, null);
-defer storage.close();
+const storage = try sdl3.storage.Storage.initTitle(null, null);
+defer storage.deinit();
 
 // Wait until storage is ready
 while (!storage.isReady()) {
     sdl3.timer.delayMilliseconds(10);
 }
 
-// Read file
+// Read file (returns void, writes to buffer)
 var buffer: [4096]u8 = undefined;
-const bytes_read = try storage.readFile("data/config.json", &buffer);
-const content = buffer[0..bytes_read];
+try storage.readFile("data/config.json", &buffer);
+// Use buffer contents
 ```
 
 ## User Storage (Saves, Settings)
 
 ```zig
 // Open user storage (writable)
-const storage = try sdl3.storage.Storage.openUser("MyCompany", "MyGame");
-defer storage.close();
+const storage = try sdl3.storage.Storage.initUser("MyCompany", "MyGame");
+defer storage.deinit();
 
 // Wait for ready
 while (!storage.isReady()) {
@@ -38,16 +38,16 @@ while (!storage.isReady()) {
 const save_data = "{ \"score\": 1000 }";
 try storage.writeFile("saves/slot1.json", save_data);
 
-// Read file
+// Read file (returns void)
 var buffer: [4096]u8 = undefined;
-const bytes = try storage.readFile("saves/slot1.json", &buffer);
+try storage.readFile("saves/slot1.json", &buffer);
 
 // Get file info
 const info = try storage.getPathInfo("saves/slot1.json");
 const file_size = info.size;
 
 // Enumerate files
-try storage.enumerate("saves", void, enumCallback, null);
+try storage.enumerateDirectory("saves", void, enumCallback, null);
 ```
 
 ## File System Storage
@@ -56,8 +56,8 @@ Open arbitrary filesystem path as storage:
 
 ```zig
 // Open directory as storage
-const storage = try sdl3.storage.Storage.openFileSystem("/path/to/data");
-defer storage.close();
+const storage = try sdl3.storage.Storage.initFile("/path/to/data");
+defer storage.deinit();
 
 // Use like any other storage
 try storage.writeFile("test.txt", "Hello");
@@ -94,7 +94,7 @@ fn enumCallback(
     return .continue_;
 }
 
-try storage.enumerate("saves", void, enumCallback, null);
+try storage.enumerateDirectory("saves", void, enumCallback, null);
 ```
 
 ### Create/Remove
@@ -107,7 +107,7 @@ try storage.createDirectory("saves/backups");
 try storage.removePath("saves/old.json");
 
 // Rename/move
-try storage.rename("saves/temp.json", "saves/slot1.json");
+try storage.renamePath("saves/temp.json", "saves/slot1.json");
 
 // Copy
 try storage.copyFile("saves/slot1.json", "saves/backup.json");
@@ -128,7 +128,7 @@ On platforms with cloud save support (Steam, consoles, etc.), user storage autom
 
 ```zig
 const storage = try sdl3.storage.Storage.openUser("MyCompany", "MyGame");
-defer storage.close();
+defer storage.deinit();
 
 // Wait for cloud sync to complete
 while (!storage.isReady()) {
@@ -151,7 +151,7 @@ try props.set(sdl3.storage.props.organization, .{ .string = "MyCompany" });
 try props.set(sdl3.storage.props.app, .{ .string = "MyGame" });
 
 const storage = try sdl3.storage.Storage.openUserWithProperties(props);
-defer storage.close();
+defer storage.deinit();
 ```
 
 ## Save System Example
@@ -176,7 +176,7 @@ const SaveManager = struct {
     }
 
     fn deinit(self: *SaveManager) void {
-        self.storage.close();
+        self.storage.deinit();
     }
 
     fn saveSlot(self: *SaveManager, slot: u32, data: []const u8) !void {
@@ -219,7 +219,7 @@ const SaveManager = struct {
         };
 
         var ctx = Ctx{ .list = &slots };
-        try self.storage.enumerate("saves", *Ctx, Ctx.callback, &ctx);
+        try self.storage.enumerateDirectory("saves", *Ctx, Ctx.callback, &ctx);
 
         return slots.toOwnedSlice();
     }
