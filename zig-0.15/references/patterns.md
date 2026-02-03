@@ -923,7 +923,9 @@ pub fn parse(args: ParseOptions) !Query {
 
 #### Index-Based Data Structures
 
-Use non-exhaustive enums to create distinct integer types that the type system can distinguish. This pattern prevents bugs from accidentally mixing up indices into different arrays or confusing semantically different integers.
+Zig enums are strongly-typed integer constants. By default, the compiler chooses a minimal backing type, but you can specify one explicitly with `enum(u32)`. Adding a trailing `_` field makes the enum *non-exhaustive*: any value of the backing type becomes valid, not just named members. This means `enum(u32) { _ }` is effectively "u32, but a distinct type"—the compiler won't implicitly convert between different enum types even if they share the same backing integer.
+
+Use this to create distinct index types that the type system can distinguish. This pattern prevents bugs from accidentally mixing up indices into different arrays or confusing semantically different integers.
 
 ```zig
 /// Index into `sections` array.
@@ -942,7 +944,7 @@ const SymbolIndex = enum(u32) {
 };
 ```
 
-The `_` marker makes the enum non-exhaustive, allowing any `u32` value. Unlike a raw `u32`, these types are incompatible with each other:
+These types are incompatible with each other, even though they share the same backing integer:
 
 ```zig
 fn getSection(index: SectionIndex) *Section { ... }
