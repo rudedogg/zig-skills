@@ -37,7 +37,7 @@ Comprehensive patterns for writing idiomatic Zig code. This reference contains b
   - [Static Dispatch (Tagged Union)](#static-dispatch-tagged-union-with-inline-switch)
 - [III. Safety Patterns](#iii-safety-patterns)
   - [Diagnostics](#diagnostics)
-  - [Enum Index](#enum-index)
+  - [Named Integer Types / Enum Index](#named-integer-types--enum-index)
   - [Error Payloads](#error-payloads)
   - [Compile-time Assertion](#compile-time-assertion)
   - [Granular Error Handling](#granular-error-handling)
@@ -920,9 +920,72 @@ pub fn parse(args: ParseOptions) !Query {
 
 **When to use:** Parser functions, validators, anywhere you want to report multiple issues or provide context with errors.
 
-#### Enum Index
-Use enums with sentinel values for type-safe indices.
+#### Named Integer Types / Enum Index
 
+Use non-exhaustive enums to create distinct integer types that the type system can distinguish. This pattern prevents bugs from accidentally mixing up indices into different arrays or confusing semantically different integers.
+
+```zig
+/// Index into `sections` array.
+const SectionIndex = enum(u32) {
+    _,
+};
+
+/// Index into `functions` array.
+const FunctionIndex = enum(u32) {
+    _,
+};
+
+/// Index into `symbols` array.
+const SymbolIndex = enum(u32) {
+    _,
+};
+```
+
+The `_` marker makes the enum non-exhaustive, allowing any `u32` value. Unlike a raw `u32`, these types are incompatible with each other:
+
+```zig
+fn getSection(index: SectionIndex) *Section { ... }
+fn getFunction(index: FunctionIndex) *Function { ... }
+
+// COMPILE ERROR: type mismatch
+const section = getSection(func_index);  // func_index is FunctionIndex, not SectionIndex
+
+// CORRECT: types match
+const section = getSection(section_index);
+```
+
+**Converting to/from the underlying integer:**
+```zig
+const index: SectionIndex = @enumFromInt(42);
+const raw: u32 = @intFromEnum(index);
+```
+
+**Optional variants** - use a sentinel value for null representation:
+```zig
+/// Index into `functions`, or null.
+const OptionalFunctionIndex = enum(u32) {
+    none = std.math.maxInt(u32),
+    _,
+
+    pub fn unwrap(self: OptionalFunctionIndex) ?FunctionIndex {
+        if (self == .none) return null;
+        return @enumFromInt(@intFromEnum(self));
+    }
+};
+
+/// Non-optional index with conversion helper.
+const FunctionIndex = enum(u32) {
+    _,
+
+    pub fn toOptional(self: FunctionIndex) OptionalFunctionIndex {
+        const result: OptionalFunctionIndex = @enumFromInt(@intFromEnum(self));
+        std.debug.assert(result != .none);
+        return result;
+    }
+};
+```
+
+**With sentinel states** - multiple special values:
 ```zig
 const Parent = enum(u8) {
     /// Unallocated storage.
@@ -932,16 +995,25 @@ const Parent = enum(u8) {
     /// Index into `node_storage`.
     _,
 
-    fn unwrap(i: @This()) ?Index {
-        return switch (i) {
+    fn unwrap(self: @This()) ?NodeIndex {
+        return switch (self) {
             .unused, .none => null,
-            else => @enumFromInt(@intFromEnum(i)),
+            _ => @enumFromInt(@intFromEnum(self)),
         };
     }
 };
 ```
 
-**When to use:** Array indices that need null/sentinel states, handles with invalid states.
+**When to use:**
+- Any index into an array/slice where you have multiple arrays
+- Handles, IDs, or tokens that should not be interchangeable
+- Any integer with semantic meaning that could be confused with other integers
+- Linkers, compilers, parsers, and any code managing multiple parallel data structures
+
+**Benefits:**
+- Compile-time detection of index mix-ups (otherwise painful runtime debugging)
+- Self-documenting code - the type name explains what the integer represents
+- Zero runtime cost - same representation as the underlying integer
 
 #### Error Payloads
 Use a tagged union to attach context to errors.
