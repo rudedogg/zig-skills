@@ -341,6 +341,7 @@ Load these references when working with specific modules:
 - **[std.log](references/std-log.md)** - Scoped logging with configurable levels and output
 
 ### Metaprogramming
+- **[Comptime Reference](references/comptime.md)** - Comptime fundamentals, type reflection (`@typeInfo`/`@Type`/`@TypeOf`), loop variants (`comptime for` vs `inline for`), branch elimination, type generation, comptime limitations
 - **[std.meta](references/std-meta.md)** - Type introspection, field iteration, stringToEnum, generic programming
 
 ### Compiler Utilities
