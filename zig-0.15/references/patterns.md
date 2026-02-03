@@ -46,6 +46,7 @@ Comprehensive patterns for writing idiomatic Zig code. This reference contains b
   - [Error-deferred Resource Deinitialization](#error-deferred-resource-deinitialization)
   - [Compile-time Unreachable Switch Prong](#compile-time-unreachable-switch-prong)
   - [Compile-time Error Absence Guarantee](#compile-time-error-absence-guarantee)
+  - [Reserve-First Exception Safety](#reserve-first-exception-safety)
 - [IV. Performance Patterns](#iv-performance-patterns)
   - [Big Struct Constant Pointer Passing](#big-struct-constant-pointer-passing)
   - [Big Struct Constant Pointer Capturing](#big-struct-constant-pointer-capturing)
@@ -1171,6 +1172,85 @@ fn spawnChild(self: *Child) !void {
 ```
 
 **When to use:** After point-of-no-return operations like fork(), to ensure subsequent code is truly infallible.
+
+#### Reserve-First Exception Safety
+When mutating data structures that can fail (e.g., growing arrays or hash maps), separate the fallible reservation phase from the infallible mutation phase. This ensures strong exception safety: if an error occurs, the object remains unchanged.
+
+**The pattern:**
+1. **Reserve** - Call `ensureUnusedCapacity` for all containers that will grow. These calls can fail but don't mutate data.
+2. **Mark boundary** - Use `errdefer comptime unreachable;` to assert no errors can occur after this point.
+3. **Mutate** - Use `*AssumeCapacity` methods which cannot fail.
+
+```zig
+// WRONG - exception safety bug
+pub fn internString(state: *State, gpa: Allocator, bytes: []const u8) !String {
+    // BUG: getOrPut inserts a slot, then ensureUnusedCapacity can fail,
+    // leaving an uninitialized entry in the hash table
+    const gop = try state.string_table.getOrPut(gpa, bytes);
+    if (gop.found_existing) return gop.key_ptr.*;
+
+    try state.string_bytes.ensureUnusedCapacity(gpa, bytes.len + 1);  // Can fail!
+    // ... rest of function
+}
+
+// CORRECT - reserve first, then mutate
+pub fn internString(state: *State, gpa: Allocator, bytes: []const u8) !String {
+    // Phase 1: Reserve capacity (all fallible operations)
+    try state.string_table.ensureUnusedCapacityContext(gpa, 1, .{
+        .bytes = state.string_bytes.items,
+    });
+    try state.string_bytes.ensureUnusedCapacity(gpa, bytes.len + 1);
+
+    errdefer comptime unreachable;  // Phase 2: No errors after this point
+
+    // Phase 3: Mutate using AssumeCapacity methods (infallible)
+    const gop = state.string_table.getOrPutAssumeCapacityAdapted(bytes, .{
+        .bytes = state.string_bytes.items,
+    });
+    if (gop.found_existing) return gop.key_ptr.*;
+
+    const new_off: String = @enumFromInt(state.string_bytes.items.len);
+    state.string_bytes.appendSliceAssumeCapacity(bytes);
+    state.string_bytes.appendAssumeCapacity(0);
+    gop.key_ptr.* = new_off;
+
+    return new_off;
+}
+```
+
+**Real-world example from HashMap.grow:**
+```zig
+fn grow(self: *Self, allocator: Allocator, new_capacity: Size, ctx: Context) Allocator.Error!void {
+    var map: Self = .{};
+    try map.allocate(allocator, new_cap);    // Can fail
+    errdefer comptime unreachable;           // No errors after this point
+
+    map.initMetadatas();                     // Infallible
+    map.available = @truncate((new_cap * max_load_percentage) / 100);
+
+    // Copy all entries using putAssumeCapacityNoClobberContext (infallible)
+    if (self.size != 0) {
+        for (self.metadata.?[0..old_capacity], self.keys()[0..old_capacity], self.values()[0..old_capacity]) |m, k, v| {
+            if (!m.isUsed()) continue;
+            map.putAssumeCapacityNoClobberContext(k, v, ctx);  // Infallible
+        }
+    }
+    // ... swap and cleanup
+}
+```
+
+**Exception safety levels:**
+- **Strong** (reserve-first): Object unchanged if error occurs
+- **Basic**: Object left in valid but different state
+- **None**: Object may be corrupted
+
+**When to use:**
+- Any function that must insert into multiple containers
+- Growing data structures where partial mutation would corrupt state
+- String/symbol interning (hash table + byte array)
+- Any operation where failure after partial mutation leaves invalid state
+
+**Key insight:** `ensureUnusedCapacity` is magic—it contains all the failure modes but changes nothing. Reservation failures are safe to retry; partial mutations are not.
 
 ### IV. Performance Patterns
 
