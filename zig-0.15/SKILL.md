@@ -248,13 +248,6 @@ switch (value) {
 | `type 'f32' cannot represent integer` | Use float literal: `123_456_789.0` not `123_456_789` |
 | `ambiguous format string` | Use `{f}` for format methods |
 
-## Version Info
-
-- **0.15.x**: Self-hosted x86_64 backend default for Debug (5x faster)
-- **0.15.x**: Use `--watch -fincremental` for incremental compilation
-- **0.15.x**: `zig build --webui` for build visualization
-- **0.14.0+**: LLVM 19; **0.15.x**: LLVM 20
-
 ## Language References
 
 Load these references when working with core language features:
