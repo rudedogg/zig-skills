@@ -1,3 +1,4 @@
+
 # std.Build - Zig Build System Reference
 
 The Zig build system models projects as directed acyclic graphs (DAG) of build steps. Build scripts are written in Zig itself (`build.zig`), providing full language features during configuration.
@@ -5,6 +6,7 @@ The Zig build system models projects as directed acyclic graphs (DAG) of build s
 ## Table of Contents
 - [Quick Start](#quick-start)
 - [Core Concepts](#core-concepts)
+- [Custom Targets](#custom-targets)
 - [Creating Executables and Libraries](#creating-executables-and-libraries)
 - [Modules](#modules)
 - [Build Options](#build-options)
@@ -16,6 +18,8 @@ The Zig build system models projects as directed acyclic graphs (DAG) of build s
 - [Generating Files](#generating-files)
 - [C/C++ Integration](#cc-integration)
 - [LazyPath](#lazypath)
+- [LazyPath Deep Dive](#lazypath-deep-dive)
+- [Build Allocation](#build-allocation)
 - [build.zig.zon](#buildzon)
 - [CLI Reference](#cli-reference)
 
@@ -101,6 +105,67 @@ const target = b.standardTargetOptions(.{
 const optimize = b.standardOptimizeOption(.{
     .preferred_optimize_mode = .ReleaseFast,  // Default for --release
 });
+```
+
+## Custom Targets
+
+### Programmatic Target Configuration
+For cross-compilation or building with specific CPU features, use `std.Target.Query`:
+
+```zig
+// Build WebAssembly with specific features
+const wasm_query: std.Target.Query = .{
+    .cpu_arch = .wasm32,
+    .os_tag = .freestanding,
+    .cpu_features_add = std.Target.wasm.featureSet(&.{ .bulk_memory, .multivalue }),
+};
+const wasm_target = b.resolveTargetQuery(wasm_query);
+
+const wasm_module = b.addExecutable(.{
+    .name = "module",
+    .root_module = b.createModule(.{
+        .root_source_file = b.path("src/wasm.zig"),
+        .target = wasm_target,
+        .optimize = .ReleaseSmall,
+    }),
+});
+```
+
+### Host Target for Build Tools
+When building tools that run during the build (code generators, asset processors), use the host target:
+
+```zig
+// Build a code generator that runs on the host machine
+const codegen_tool = b.addExecutable(.{
+    .name = "codegen",
+    .root_module = b.createModule(.{
+        .root_source_file = b.path("tools/codegen.zig"),
+        .target = b.graph.host,  // Always builds for the machine running the build
+        .optimize = .ReleaseFast,
+    }),
+});
+
+// This tool can be run even when cross-compiling the main project
+const run_codegen = b.addRunArtifact(codegen_tool);
+```
+
+### CPU Feature Sets
+Enable specific CPU features for optimized builds:
+
+```zig
+// x86_64 with AVX2 and FMA
+const x86_query: std.Target.Query = .{
+    .cpu_arch = .x86_64,
+    .os_tag = .linux,
+    .cpu_features_add = std.Target.x86.featureSet(&.{ .avx2, .fma }),
+};
+
+// ARM with NEON
+const arm_query: std.Target.Query = .{
+    .cpu_arch = .aarch64,
+    .os_tag = .linux,
+    .cpu_features_add = std.Target.aarch64.featureSet(&.{ .neon, .crypto }),
+};
 ```
 
 ## Creating Executables and Libraries
@@ -284,6 +349,65 @@ if (!target.result.os.tag.isDarwin()) {
 }
 ```
 
+### Compile Step Outputs
+Access various outputs from compile steps:
+
+```zig
+const lib = b.addLibrary(.{
+    .name = "mylib",
+    .linkage = .static,
+    .root_module = b.createModule(.{
+        .root_source_file = b.path("src/lib.zig"),
+        .target = target,
+        .optimize = optimize,
+    }),
+});
+
+// Get LazyPath to the compiled binary in .zig-cache
+const bin_path = lib.getEmittedBin();
+
+// Get assembly output for debugging codegen (like godbolt.org but for your project)
+const asm_path = lib.getEmittedAsm();
+const install_asm = b.addInstallFile(asm_path, "debug/lib.s");
+const asm_step = b.step("asm", "View generated assembly");
+asm_step.dependOn(&install_asm.step);
+```
+
+### Run Step Data Dependencies
+Pass file and directory paths as arguments while establishing proper data dependencies:
+
+```zig
+const gen_tool = b.addExecutable(.{
+    .name = "gen",
+    .root_module = b.createModule(.{
+        .root_source_file = b.path("tools/gen.zig"),
+        .target = b.graph.host,
+    }),
+});
+
+const run_gen = b.addRunArtifact(gen_tool);
+
+// Directory input with prefix (--shader-dir=/path/to/shaders)
+run_gen.addPrefixedDirectoryArg("--shader-dir=", b.path("data/shaders"));
+
+// Output file with prefix (--out=/path/to/output.h)
+// Returns LazyPath to the generated file
+const generated_header = run_gen.addPrefixedOutputFileArg("--out=", "shaders.h");
+
+// The step now has data dependencies: if shaders change, it re-runs
+```
+
+### UpdateSourceFiles Step
+Copy generated files back into the source tree (for committing generated code):
+
+```zig
+const update_src = b.addUpdateSourceFiles();
+update_src.addCopyFileToSource(generated_file, "src/generated.zig");
+
+const update_step = b.step("update-generated", "Update generated source files");
+update_step.dependOn(&update_src.step);
+```
+
 ## Dependencies
 
 ### Declaring in build.zig.zon
@@ -324,12 +448,42 @@ exe.root_module.addIncludePath(include_path);
 ```
 
 ### Lazy Dependencies
+Lazy dependencies are only fetched when actually used, avoiding unnecessary downloads for platform-specific or optional dependencies.
+
+**In build.zig.zon:**
 ```zig
-// Only fetch if actually needed
-if (b.lazyDependency("heavy_dep", .{ .target = target })) |dep| {
-    exe.root_module.addImport("heavy", dep.module("heavy"));
+.dependencies = .{
+    // Mark platform-specific dependency as lazy
+    .@"dawn-windows-x64" = .{
+        .url = "https://github.com/example/dawn/releases/download/v1.0/dawn-windows-x64.tar.gz",
+        .hash = "1220abc...",
+        .lazy = true,  // Only fetched when lazyDependency() is called
+    },
+    .@"dawn-linux-x64" = .{
+        .url = "https://github.com/example/dawn/releases/download/v1.0/dawn-linux-x64.tar.gz",
+        .hash = "1220def...",
+        .lazy = true,
+    },
+},
+```
+
+**In build.zig:**
+```zig
+// lazyDependency returns ?*Dependency (null if not yet fetched)
+const dawn_dep = switch (target.result.os.tag) {
+    .windows => b.lazyDependency("dawn-windows-x64", .{}),
+    .linux => b.lazyDependency("dawn-linux-x64", .{}),
+    else => null,
+};
+
+if (dawn_dep) |dep| {
+    // Dependency is available, use normally
+    exe.addLibraryPath(dep.path("lib"));
+    exe.linkSystemLibrary("dawn");
 }
 ```
+
+**How it works:** After the build graph is constructed, `zig build` checks if any `lazyDependency()` calls require unfetched dependencies (returned null). If so, it fetches them and re-runs the build script with the dependencies now available.
 
 ### Passing Options to Dependencies
 ```zig
@@ -605,6 +759,36 @@ exe.linkSystemLibrary("openssl");
 exe.linkSystemLibrary("libcurl");
 ```
 
+### Best Practices: Prefer Zig APIs Over Clang Flags
+When building C/C++ code, prefer Zig's explicit APIs over raw Clang flags for better type safety and build graph visibility:
+
+```zig
+// PREFERRED: Use Zig APIs
+exe.root_module.addIncludePath(b.path("include"));          // Instead of -I
+exe.root_module.addSystemIncludePath(dep.path("include")); // Instead of -isystem
+
+// PREFERRED: Use Module.CreateOptions
+const mod = b.createModule(.{
+    .root_source_file = b.path("src/main.zig"),
+    .target = target,
+    .optimize = optimize,
+    .link_libc = false,    // Instead of -nolibc flag
+    .sanitize_c = false,   // Instead of -fno-sanitize flags
+});
+
+// AVOID: Raw Clang flags (use only when no Zig API exists)
+exe.addCSourceFiles(.{
+    .files = &.{"foo.c"},
+    .flags = &.{"-DDEBUG"},  // Use addCMacro instead when possible
+});
+```
+
+This approach:
+- Provides type-checked configuration
+- Gives the build graph visibility into dependencies
+- Supports LazyPaths for generated/dependency paths
+- Prevents flags from conflicting with each other
+
 ## LazyPath
 
 LazyPath represents paths that may not exist until build time.
@@ -634,6 +818,102 @@ exe.addIncludePath(dep.path("include"));
 
 // Install
 b.installFile(generated_file, "share/output.txt");
+```
+
+## LazyPath Deep Dive
+
+LazyPath is central to how data flows between build steps. Understanding its variants and methods is key to advanced build scripts.
+
+### The Four Variants
+```zig
+const LazyPath = union(enum) {
+    // Path relative to build root (most common)
+    src_path: struct { root: ?*Build, sub_path: []const u8 },
+
+    // Output from a build step (e.g., compiled binary, generated file)
+    generated: struct { file: *GeneratedFile, sub_path: ?[]const u8 },
+
+    // Absolute or CWD-relative path (use sparingly)
+    cwd_relative: []const u8,
+
+    // Path inside a dependency package
+    dependency: struct { dep: *Dependency, sub_path: []const u8 },
+};
+```
+
+### Creating LazyPaths
+```zig
+// From build root (returns src_path variant)
+const src = b.path("src/main.zig");
+
+// From build step output (returns generated variant)
+const bin = exe.getEmittedBin();
+const generated = run_step.addOutputFileArg("output.txt");
+
+// From dependency (returns dependency variant)
+const dep_header = zlib.path("include/zlib.h");
+
+// Absolute path (returns cwd_relative variant - avoid when possible)
+const abs: LazyPath = .{ .cwd_relative = "/usr/include" };
+```
+
+### Establishing Data Dependencies
+When passing LazyPaths between steps, use `addStepDependencies()` to ensure proper ordering:
+
+```zig
+const gen_step = b.addRunArtifact(generator);
+const generated_file = gen_step.addOutputFileArg("data.bin");
+
+// IMPORTANT: Establish that compile step depends on gen_step's output
+generated_file.addStepDependencies(&exe.step);
+
+// Now exe will wait for gen_step to complete before compiling
+exe.root_module.addAnonymousImport("data", .{
+    .root_source_file = generated_file,
+});
+```
+
+### Path Navigation
+```zig
+const base = b.path("src/modules/parser");
+
+// Navigate to parent directory
+const parent = base.dirname();  // "src/modules"
+
+// Concatenate subpath
+const file = base.join("lexer.zig");  // "src/modules/parser/lexer.zig"
+
+// Chain operations
+const sibling = base.dirname().join("utils/helpers.zig");  // "src/modules/utils/helpers.zig"
+```
+
+## Build Allocation
+
+The Build struct provides an arena allocator for convenient memory management in build scripts.
+
+### Using the Arena Allocator
+```zig
+pub fn build(b: *std.Build) void {
+    // b.allocator is an arena - no need to free allocations
+    const items = b.allocator.alloc(u8, 1024) catch @panic("OOM");
+    // No need to call b.allocator.free(items)
+
+    // All allocations are freed when the build completes
+}
+```
+
+### Convenience Functions
+```zig
+// Join paths without allocator noise
+const full_path = b.pathJoin(&.{ "src", "modules", "parser.zig" });
+
+// Format strings without worrying about storage
+const name = b.fmt("myapp-{s}-{s}", .{
+    @tagName(target.result.cpu_arch),
+    @tagName(target.result.os_tag),
+});
+
+// Both return arena-allocated strings that don't need freeing
 ```
 
 ## build.zig.zon
