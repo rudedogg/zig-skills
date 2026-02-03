@@ -130,7 +130,7 @@ const remaining = w.unusedCapacitySlice();
 ```zig
 // Write to fixed buffer, error when full
 var buf: [256]u8 = undefined;
-var w: std.io.Writer = .fixed(&buf);
+var w: std.Io.Writer = .fixed(&buf);
 try w.print("Hello {s}\n", .{"world"});
 const result = w.buffered();  // Get written data
 ```
@@ -139,7 +139,7 @@ const result = w.buffered();  // Get written data
 ```zig
 // Discard all output (useful for counting bytes written)
 var buffer: [256]u8 = undefined;
-var discard: std.io.Writer.Discarding = .init(&buffer);
+var discard: std.Io.Writer.Discarding = .init(&buffer);
 try discard.writer.print("test {d}", .{42});
 // Output discarded, but count tracked
 const bytes_written = discard.fullCount();  // includes buffered data
@@ -148,7 +148,7 @@ const bytes_written = discard.fullCount();  // includes buffered data
 ### Allocating Writer
 ```zig
 // Automatically grows buffer
-var aw: std.io.Writer.Allocating = .init(allocator);
+var aw: std.Io.Writer.Allocating = .init(allocator);
 defer aw.deinit();
 
 try aw.writer.print("Hello {s}\n", .{"world"});
@@ -286,7 +286,7 @@ try r.appendRemaining(allocator, &list, .limited(max_size));
 ### Fixed Reader (from buffer)
 ```zig
 // Read from existing buffer
-var r: std.io.Reader = .fixed("hello world");
+var r: std.Io.Reader = .fixed("hello world");
 const word = try r.takeDelimiterExclusive(' ');  // "hello"
 ```
 
@@ -426,7 +426,7 @@ fn parseHeader(file: std.fs.File) !FileHeader {
 ### Build String with Allocating Writer
 ```zig
 fn buildMessage(allocator: Allocator, items: []const Item) ![]u8 {
-    var aw: std.io.Writer.Allocating = .init(allocator);
+    var aw: std.Io.Writer.Allocating = .init(allocator);
     errdefer aw.deinit();
     const w = &aw.writer;
 
@@ -498,14 +498,14 @@ var limited = underlying_reader.limited(.limited(1024), &limited_buf);
 
 ### Writer Errors
 ```zig
-std.io.Writer.Error = error{WriteFailed};
+std.Io.Writer.Error = error{WriteFailed};
 ```
 
 ### Reader Errors
 ```zig
-std.io.Reader.Error = error{ReadFailed, EndOfStream};
-std.io.Reader.StreamError = error{ReadFailed, WriteFailed, EndOfStream};
-std.io.Reader.DelimiterError = error{ReadFailed, EndOfStream, StreamTooLong};
+std.Io.Reader.Error = error{ReadFailed, EndOfStream};
+std.Io.Reader.StreamError = error{ReadFailed, WriteFailed, EndOfStream};
+std.Io.Reader.DelimiterError = error{ReadFailed, EndOfStream, StreamTooLong};
 ```
 
 ## std.io.Limit

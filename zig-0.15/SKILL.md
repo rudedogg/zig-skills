@@ -20,7 +20,7 @@ pub const foo = other.foo;
 ```
 
 ### `async`/`await` - REMOVED
-Keywords removed from language. Async I/O is now in `std.Io` interface.
+Keywords removed from language. Async I/O support is planned for future releases.
 
 ## Critical: I/O API Rewrite ("Writergate")
 
@@ -60,15 +60,15 @@ const value = try r.takeInt(u32, .big);
 ### Fixed Buffer Writer (no file)
 ```zig
 var buf: [256]u8 = undefined;
-var w: std.io.Writer = .fixed(&buf);
+var w: std.Io.Writer = .fixed(&buf);
 try w.print("Hello {s}", .{"world"});
 const result = w.buffered();  // "Hello world"
 ```
 
 ### Fixed Reader (from slice)
 ```zig
-var r: std.io.Reader = .fixed("hello\nworld");
-const line = try r.takeDelimiter('\n');  // "hello"
+var r: std.Io.Reader = .fixed("hello\nworld");
+const line = (try r.takeDelimiter('\n')).?;  // "hello" (returns null at EOF)
 ```
 
 **Removed:** `BufferedWriter`, `CountingWriter`, `std.io.bufferedWriter()`
