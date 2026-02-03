@@ -52,6 +52,12 @@ Comprehensive patterns for writing idiomatic Zig code. This reference contains b
   - [Big Struct Constant Pointer Capturing](#big-struct-constant-pointer-capturing)
 - [V. Workarounds](#v-workarounds)
   - [Inlined Loop with Runtime Logic](#inlined-loop-with-runtime-logic)
+- [VI. Comptime Metaprogramming Patterns](#vi-comptime-metaprogramming-patterns)
+  - [Tagged Union Subset Generation](#tagged-union-subset-generation)
+  - [Comptime Conditional Code Elimination](#comptime-conditional-code-elimination)
+  - [Comptime vs Inline For](#comptime-vs-inline-for)
+  - [Comptime Specialization](#comptime-specialization)
+  - [Comptime Limitations Reference](#comptime-limitations-reference)
 
 ---
 
@@ -1464,3 +1470,365 @@ fn deinterlace(interlaced: anytype, comptime vec_count: usize) [vec_count]@Vecto
 ```
 
 **When to use:** When you need compile-time loop unrolling but `inline for` fails due to control flow or mutation requirements.
+
+### VI. Comptime Metaprogramming Patterns
+
+Zig's comptime system enables powerful metaprogramming through partial evaluation and type reflection. These patterns show idiomatic ways to leverage comptime for code generation, specialization, and compile-time validation.
+
+#### Tagged Union Subset Generation
+Generate a subset union type from a larger union at comptime. Useful for scoping actions—e.g., separating terminal-specific keybinds from app-wide actions.
+
+```zig
+const std = @import("std");
+
+/// Generate a union type containing only specified fields from the source union.
+pub fn Subset(comptime T: type, comptime fields: []const std.meta.FieldEnum(T)) type {
+    const source_info = @typeInfo(T).@"union";
+    var new_fields: [fields.len]std.builtin.Type.UnionField = undefined;
+
+    for (fields, 0..) |field_enum, i| {
+        const field_name = @tagName(field_enum);
+        for (source_info.fields) |source_field| {
+            if (std.mem.eql(u8, source_field.name, field_name)) {
+                new_fields[i] = source_field;
+                break;
+            }
+        }
+    }
+
+    return @Type(.{
+        .@"union" = .{
+            .layout = source_info.layout,
+            .tag_type = std.meta.FieldEnum(@Type(.{
+                .@"union" = .{
+                    .layout = source_info.layout,
+                    .tag_type = null,
+                    .fields = &new_fields,
+                    .decls = &.{},
+                },
+            })),
+            .fields = &new_fields,
+            .decls = &.{},
+        },
+    });
+}
+
+// Example: App-wide actions
+const Action = union(enum) {
+    quit,
+    scroll_up: u32,
+    scroll_down: u32,
+    copy: []const u8,
+    paste,
+    terminal_reset,
+    terminal_clear,
+};
+
+// Subset for terminal-specific actions only
+const TerminalAction = Subset(Action, &.{ .terminal_reset, .terminal_clear, .scroll_up, .scroll_down });
+
+fn handleTerminalAction(action: TerminalAction) void {
+    switch (action) {
+        .terminal_reset => {},
+        .terminal_clear => {},
+        .scroll_up => |n| _ = n,
+        .scroll_down => |n| _ = n,
+    }
+}
+```
+
+**Converting between union types:**
+```zig
+/// Convert a subset action back to the full action type.
+pub fn toFullAction(subset: TerminalAction) Action {
+    // inline else captures tag at comptime, enabling @unionInit
+    return switch (subset) {
+        inline else => |payload, tag| @unionInit(Action, @tagName(tag), payload),
+    };
+}
+
+/// Try to narrow a full action to the subset type.
+pub fn toSubset(action: Action) ?TerminalAction {
+    return switch (action) {
+        // Match only the fields that exist in the subset
+        inline .terminal_reset, .terminal_clear, .scroll_up, .scroll_down => |payload, tag| {
+            return @unionInit(TerminalAction, @tagName(tag), payload);
+        },
+        else => null,
+    };
+}
+```
+
+**Key techniques:**
+- `@typeInfo(T).@"union".fields` - reflect on union fields (note: use `@"union"` because `union` is a keyword)
+- `@Type(.{ .@"union" = ... })` - reify a new union type from type info
+- `@unionInit(Union, field_name, payload)` - create a union value with comptime-known tag
+- `inline else => |payload, tag|` - capture both payload and tag at comptime in switch
+
+**Verified in stdlib:** `std/meta.zig`, `std/zig/llvm/Builder.zig`, `std/json/static.zig:299-302`
+
+**When to use:** Creating type-safe subsets of commands/actions, narrowing API surfaces, permission scoping.
+
+#### Comptime Conditional Code Elimination
+Use comptime conditions to eliminate code branches at compile time. The compiler removes dead branches entirely—no runtime cost.
+
+```zig
+const builtin = @import("builtin");
+const native_endian = builtin.cpu.arch.endian();
+
+pub fn readIntBig(comptime T: type, bytes: []const u8) T {
+    const value: T = @bitCast(bytes[0..@sizeOf(T)].*);
+
+    // Compiler eliminates the branch not taken
+    if (comptime native_endian == .big) {
+        return value;
+    } else {
+        return @byteSwap(value);
+    }
+}
+```
+
+**Comptime conditions with runtime follow-up:**
+```zig
+pub fn log(comptime level: Level, comptime format: []const u8, args: anytype) void {
+    // First condition is comptime - eliminates entire function body if false
+    if (comptime level.order() <= std.log.level.order()) {
+        // Runtime condition only evaluated if comptime condition passed
+        if (runtime_logging_enabled) {
+            writeLog(level, format, args);
+        }
+    }
+}
+```
+
+**Propagating comptime conditions across function boundaries:**
+```zig
+// WITHOUT inline: comptime condition doesn't propagate
+fn maybeLog(comptime enabled: bool, msg: []const u8) void {
+    if (enabled) {  // This branch isn't eliminated in callers
+        std.debug.print("{s}\n", .{msg});
+    }
+}
+
+// WITH inline: comptime condition propagates to each call site
+inline fn maybeLogInline(comptime enabled: bool, msg: []const u8) void {
+    if (comptime enabled) {  // Branch eliminated at each call site
+        std.debug.print("{s}\n", .{msg});
+    }
+}
+
+// Usage - with inline version, disabled calls generate zero code
+pub fn example() void {
+    maybeLogInline(false, "debug info");  // Entire call eliminated
+    maybeLogInline(true, "important");     // Only this generates code
+}
+```
+
+**Verified in stdlib:** `std/math.zig:708`, `std/log.zig:122`
+
+**When to use:** Platform-specific code, feature flags, debug-only code, logging levels, build-time configuration.
+
+#### Comptime vs Inline For
+Understanding when to use `comptime for`, `inline for`, and regular `for` is crucial for correct Zig metaprogramming.
+
+**`comptime for`** - Full compile-time evaluation. The loop executes entirely at compile time, can use `break` to return values, and cannot reference runtime values.
+
+```zig
+fn sumComptime(comptime values: []const i32) i32 {
+    comptime {
+        var sum: i32 = 0;
+        for (values) |v| {
+            sum += v;
+        }
+        return sum;
+    }
+}
+
+// Finding a type at compile time
+fn hasField(comptime T: type, comptime name: []const u8) bool {
+    const fields = @typeInfo(T).@"struct".fields;
+    return comptime for (fields) |f| {
+        if (std.mem.eql(u8, f.name, name)) break true;
+    } else false;
+}
+```
+
+**`inline for`** - Loop unrolling with code generation. The loop body is duplicated for each iteration at compile time, but the body can reference runtime values. Cannot use `break` to return values.
+
+```zig
+fn printFields(value: anytype) void {
+    const T = @TypeOf(value);
+    const fields = @typeInfo(T).@"struct".fields;
+
+    // Each iteration generates separate code
+    inline for (fields) |field| {
+        const field_value = @field(value, field.name);
+        std.debug.print("{s} = {any}\n", .{ field.name, field_value });
+    }
+}
+
+// Runtime dispatch via unrolling
+fn eqlAny(comptime T: type, a: T, b: T) bool {
+    const fields = @typeInfo(T).@"struct".fields;
+    inline for (fields) |field| {
+        if (@field(a, field.name) != @field(b, field.name)) {
+            return false;  // Runtime return, not comptime break
+        }
+    }
+    return true;
+}
+```
+
+**Decision table:**
+
+| Need | Use | Reason |
+|------|-----|--------|
+| Return value from loop | `comptime for` | Only comptime allows `break` with value |
+| Access runtime values in body | `inline for` | Comptime can't see runtime |
+| Type-level computation only | `comptime for` | Clearer intent, no code gen |
+| Generate code per iteration | `inline for` | Each iteration = separate code |
+| Normal runtime iteration | regular `for` | No unrolling needed |
+
+**Verified in stdlib:**
+- `comptime for` with break: `std/Build.zig:1953`
+- `inline for`: `std/meta.zig:27`, `compiler_rt/fmax.zig:63`
+
+#### Comptime Specialization
+Zig achieves generic programming through comptime type parameters, not code generation macros. Functions accepting `comptime T: type` are specialized (monomorphized) for each type they're called with.
+
+```zig
+// Generic print - specialized for each type at compile time
+pub fn print(comptime fmt: []const u8, args: anytype) void {
+    const ArgsType = @TypeOf(args);
+    const args_info = @typeInfo(ArgsType).@"struct";
+
+    // Each unique call site generates specialized code
+    inline for (args_info.fields, 0..) |field, i| {
+        const arg = @field(args, field.name);
+        formatValue(arg);  // Specialized per field type
+    }
+}
+
+// Type-driven dispatch
+fn serialize(comptime T: type, value: T, writer: anytype) !void {
+    const info = @typeInfo(T);
+
+    // Switch on type category - each branch specialized
+    switch (info) {
+        .int, .comptime_int => try writer.writeInt(T, value, .little),
+        .float => try writer.writeAll(std.mem.asBytes(&value)),
+        .@"struct" => |s| {
+            inline for (s.fields) |field| {
+                try serialize(field.type, @field(value, field.name), writer);
+            }
+        },
+        .pointer => |p| {
+            if (p.size == .Slice) {
+                try writer.writeInt(u32, @intCast(value.len), .little);
+                for (value) |item| {
+                    try serialize(p.child, item, writer);
+                }
+            }
+        },
+        else => @compileError("Unsupported type: " ++ @typeName(T)),
+    }
+}
+```
+
+**This is partial evaluation, not code generation.** The compiler evaluates comptime expressions and eliminates dead branches. There's no separate "macro expansion" phase—comptime and runtime code are unified.
+
+**Key insight:** You cannot generate new API surface at comptime. A generated struct type can't have methods added dynamically. This is intentional: all API is visible in source code.
+
+```zig
+// This works - struct with predefined shape
+fn Pair(comptime A: type, comptime B: type) type {
+    return struct {
+        first: A,
+        second: B,
+
+        // Methods must be defined here, not generated
+        pub fn swap(self: @This()) Pair(B, A) {
+            return .{ .first = self.second, .second = self.first };
+        }
+    };
+}
+
+// This is NOT possible - can't add methods to external types
+// fn addMethod(comptime T: type, comptime name: []const u8, impl: anytype) type
+```
+
+**When to use:** Generic data structures, serialization, formatting, any code that varies by type.
+
+#### Comptime Limitations Reference
+Zig's comptime is deliberately constrained to maintain cross-compilation safety and code clarity. Understanding what comptime *cannot* do helps set correct expectations.
+
+**No host architecture leakage:**
+```zig
+// COMPILE ERROR: comptime can't detect host architecture
+const host_is_64bit = comptime @sizeOf(usize) == 8;  // This reflects TARGET, not host
+
+// Correct: Use build system for host detection
+// build.zig can query host via std.builtin.cpu
+```
+
+**No arbitrary string evaluation (`#eval`):**
+```zig
+// NOT POSSIBLE: Can't turn strings into code
+const code = "x + y";
+const result = @eval(code);  // No such builtin
+
+// Zig alternative: Use comptime-known format strings
+// std.fmt.comptimePrint("value: {d}", .{42})
+```
+
+**No DSLs beyond Zig syntax:**
+```zig
+// NOT POSSIBLE: Can't define custom syntax
+const query = sql { SELECT * FROM users };  // No DSL support
+
+// Zig alternative: Embed DSLs as strings, parse at comptime
+const query = comptime sql.parse("SELECT * FROM users");  // String parsing works
+```
+
+**No runtime type information (RTTI):**
+```zig
+// NOT POSSIBLE: Types exist only at comptime
+fn getTypeName(value: anytype) []const u8 {
+    return @typeName(@TypeOf(value));  // This works!
+}
+
+// But you cannot:
+fn typeFromName(name: []const u8) type {  // IMPOSSIBLE
+    // Can't turn runtime string into type
+}
+```
+
+**No I/O at comptime:**
+```zig
+// NOT POSSIBLE: No syscalls during compilation
+const config = comptime std.fs.cwd().readFile("config.json");  // Error
+
+// Zig alternative: Use @embedFile for static assets
+const config = @embedFile("config.json");
+
+// Or use build.zig for build-time I/O
+// Build scripts run as normal programs with full I/O
+```
+
+**Summary of boundaries:**
+
+| Want to do | Comptime? | Alternative |
+|------------|-----------|-------------|
+| Type reflection | Yes | `@typeInfo`, `@TypeOf` |
+| Generate types | Yes | Return struct from function |
+| Add methods to types | No | Define methods in the type definition |
+| Read files | No | `@embedFile` or build.zig |
+| Syscalls | No | build.zig (runs as program) |
+| Parse strings to code | No | Parse strings to data structures |
+| Host detection | No | Build system queries |
+
+**Design rationale:** These constraints ensure:
+1. Cross-compilation works (comptime sees target, not host)
+2. Code is readable (no hidden code generation)
+3. Builds are reproducible (no I/O side effects)
+4. All API is visible in source (no dynamic method injection)
