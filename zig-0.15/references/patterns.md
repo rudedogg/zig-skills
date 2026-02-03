@@ -58,6 +58,8 @@ Comprehensive patterns for writing idiomatic Zig code. This reference contains b
 
 ### Memory and Allocators
 
+> **Naming convention:** Name allocators by their memory contract (`gpa`, `arena`, `scratch`) not generically as `allocator`. See [Allocator Naming Conventions](std-allocators.md#allocator-naming-conventions) for details.
+
 #### Allocator Setup
 ```zig
 // Debug allocator (development - detects leaks, use-after-free)

@@ -19,6 +19,104 @@ Zig has no default allocator. Functions that need heap memory accept an `Allocat
 | `std.heap.StackFallbackAllocator` | Stack buffer with heap fallback | Depends |
 | `std.heap.wasm_allocator` | WebAssembly targets | Yes |
 
+## Allocator Naming Conventions
+
+Using a generic `allocator` name hides memory ownership contracts. Name allocators by their **memory contract** to make code self-documenting:
+
+| Name | Contract | Can Return Data? |
+|------|----------|------------------|
+| `gpa` | Caller **must** free with `defer gpa.free()` | Yes |
+| `arena` | Bulk-deallocated at system boundary | Yes |
+| `scratch` | Function-private temporary space | **Never** |
+
+### The Problem
+
+```zig
+// BAD - "allocator" says nothing about ownership
+fn process(allocator: Allocator) ![]u8 {
+    const temp = try allocator.alloc(u8, 100);  // Who frees this?
+    const result = try allocator.dupe(u8, temp); // Who owns this?
+    allocator.free(temp);  // Is this correct?
+    return result;  // Can caller free with same allocator?
+}
+```
+
+### The Solution
+
+Name allocators by their contract:
+
+```zig
+// GOOD - names communicate ownership contracts
+fn process(
+    gpa: Allocator,      // General-purpose: caller must free returned data
+    scratch: Allocator,  // Temporary: never return data allocated here
+) ![]u8 {
+    // scratch is for intermediate computation only
+    const temp = try scratch.alloc(u8, 100);
+    defer scratch.free(temp);
+
+    // gpa for data that outlives this function
+    return try gpa.dupe(u8, computeResult(temp));
+}
+```
+
+### Full Example with All Three
+
+```zig
+fn handleRequest(
+    request: *Request,
+    arena: Allocator,   // Response lifetime - bulk freed after response sent
+    gpa: Allocator,     // Long-lived data - cache, shared state
+    scratch: Allocator, // This function only - intermediate computation
+) !Response {
+    // Scratch: temporary parsing buffers (never escapes this function)
+    const parsed = try parseBody(request.body, scratch);
+
+    // GPA: update shared cache (outlives request)
+    try updateCache(gpa, parsed.cache_key, parsed.value);
+
+    // Arena: response data (freed when response completes)
+    const response_body = try formatResponse(arena, parsed);
+
+    return Response{ .body = response_body };
+}
+```
+
+### Common Patterns
+
+**CLI applications** - arena for everything, freed at exit:
+```zig
+pub fn main() !void {
+    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    defer arena.deinit();
+    try run(arena.allocator());  // Name as "arena" - bulk freed at end
+}
+```
+
+**Request handlers** - arena per request, gpa for shared state:
+```zig
+fn handleRequest(gpa: Allocator, request: Request) !Response {
+    var request_arena = std.heap.ArenaAllocator.init(gpa);
+    defer request_arena.deinit();
+    const arena = request_arena.allocator();
+
+    // arena: request-scoped data
+    // gpa: data that outlives the request (caches, connections)
+}
+```
+
+**Functions with temporary allocations** - scratch parameter:
+```zig
+/// Computes result using scratch for intermediate work.
+/// Caller owns returned slice (allocated from gpa).
+fn compute(gpa: Allocator, scratch: Allocator, input: []const u8) ![]u8 {
+    const temp = try scratch.alloc(u8, input.len * 2);
+    defer scratch.free(temp);
+    // ... use temp for intermediate computation ...
+    return try gpa.dupe(u8, result);
+}
+```
+
 ## Allocator Interface
 
 ```zig
