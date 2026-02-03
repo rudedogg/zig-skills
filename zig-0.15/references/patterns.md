@@ -37,7 +37,7 @@ Comprehensive patterns for writing idiomatic Zig code. This reference contains b
   - [Static Dispatch (Tagged Union)](#static-dispatch-tagged-union-with-inline-switch)
 - [III. Safety Patterns](#iii-safety-patterns)
   - [Diagnostics](#diagnostics)
-  - [Named Integer Types / Enum Index](#named-integer-types--enum-index)
+  - [Index-Based Data Structures](#index-based-data-structures)
   - [Error Payloads](#error-payloads)
   - [Compile-time Assertion](#compile-time-assertion)
   - [Granular Error Handling](#granular-error-handling)
@@ -921,7 +921,7 @@ pub fn parse(args: ParseOptions) !Query {
 
 **When to use:** Parser functions, validators, anywhere you want to report multiple issues or provide context with errors.
 
-#### Named Integer Types / Enum Index
+#### Index-Based Data Structures
 
 Use non-exhaustive enums to create distinct integer types that the type system can distinguish. This pattern prevents bugs from accidentally mixing up indices into different arrays or confusing semantically different integers.
 
@@ -1015,6 +1015,153 @@ const Parent = enum(u8) {
 - Compile-time detection of index mix-ups (otherwise painful runtime debugging)
 - Self-documenting code - the type name explains what the integer represents
 - Zero runtime cost - same representation as the underlying integer
+
+**Why Indices Over Pointers**
+
+Index-based data structures offer significant advantages over pointer-based ones:
+
+- **Memory efficiency**: 4 bytes (u32) vs 8 bytes (pointer) per reference—50% savings
+- **Cache locality**: Contiguous array storage means better cache utilization
+- **Fewer allocations**: Append to array vs individual `create()` calls
+- **Instant bulk frees**: One `deinit()` vs recursive traversal
+- **Natural serialization**: Indices are relocatable; can `@memcpy` entire arrays
+
+**Tree and Graph Modeling**
+
+Use the "collective noun first" idiom: define the container (`Tree`) before the index type (`Node`). The index is just an integer—actual data lives in the container.
+
+```zig
+/// A tree structure using index-based nodes.
+pub const Tree = struct {
+    /// Node storage - the actual data lives here.
+    nodes: std.MultiArrayList(Node.Data),
+    /// Root is always index 0.
+    root: Node = .root,
+
+    pub const Node = enum(u32) {
+        root = 0,
+        _,
+
+        /// Data stored for each node.
+        pub const Data = struct {
+            tag: Tag,
+            parent: OptionalNode,
+            children: Children,
+            // ... other fields
+        };
+
+        pub const Tag = enum { leaf, branch };
+
+        pub const Children = struct {
+            start: Node,
+            len: u32,
+        };
+    };
+
+    pub const OptionalNode = enum(u32) {
+        none = std.math.maxInt(u32),
+        _,
+
+        pub fn unwrap(self: OptionalNode) ?Node {
+            if (self == .none) return null;
+            return @enumFromInt(@intFromEnum(self));
+        }
+    };
+
+    /// Access node data by index.
+    pub fn get(self: *const Tree, node: Node) Node.Data {
+        return self.nodes.get(@intFromEnum(node));
+    }
+
+    /// Get mutable pointer to node data.
+    pub fn getPtr(self: *Tree, node: Node) *Node.Data {
+        const slice = self.nodes.slice();
+        return &slice.items(.tag)[@intFromEnum(node)];
+    }
+};
+```
+
+This pattern mirrors `std.zig.Ast` from the Zig standard library:
+- `Ast.Node.Index` is `enum(u32) { _, }` (lines 3020-3035 in Ast.zig)
+- Node data accessed via `ast.nodes.get(index)`
+- Optional indices use `maxInt` sentinel: `Ast.Node.OptionalIndex`
+
+**Index Ranges**
+
+For variable-length children, use the `Index.Range` pattern from `Zoir.zig`:
+
+```zig
+pub const Node = enum(u32) {
+    _,
+
+    /// A range of contiguous node indices.
+    pub const Range = struct {
+        start: Node,
+        len: u32,
+
+        /// Get the node at offset `i` within this range.
+        pub fn at(r: Range, i: u32) Node {
+            std.debug.assert(i < r.len);
+            return @enumFromInt(@intFromEnum(r.start) + i);
+        }
+
+        /// Iterate over all nodes in range.
+        pub fn slice(r: Range) []const Node {
+            // Note: requires nodes stored contiguously
+            return @ptrCast(@as([*]const u32, @ptrFromInt(@intFromEnum(r.start)))[0..r.len]);
+        }
+    };
+};
+
+// Usage in tree traversal:
+fn visitChildren(tree: *const Tree, node: Tree.Node) void {
+    const data = tree.get(node);
+    var i: u32 = 0;
+    while (i < data.children.len) : (i += 1) {
+        const child = data.children.at(i);
+        visit(tree, child);
+    }
+}
+```
+
+**Freelist for Deletion**
+
+When individual node deletion is needed, maintain a freelist stack:
+
+```zig
+pub const NodePool = struct {
+    nodes: std.ArrayListUnmanaged(Node.Data),
+    /// Head of freelist, or none if no free slots.
+    free_head: OptionalNode = .none,
+
+    pub fn alloc(self: *NodePool) !Node {
+        if (self.free_head.unwrap()) |free| {
+            // Reuse freed slot
+            self.free_head = self.nodes.items[@intFromEnum(free)].next_free;
+            return free;
+        }
+        // Allocate new slot
+        const index: Node = @enumFromInt(self.nodes.items.len);
+        try self.nodes.append(undefined);
+        return index;
+    }
+
+    pub fn free(self: *NodePool, node: Node) void {
+        // Push onto freelist
+        self.nodes.items[@intFromEnum(node)].next_free = self.free_head;
+        self.free_head = node.toOptional();
+    }
+};
+```
+
+**Stdlib examples of these patterns:**
+| Pattern | File | Description |
+|---------|------|-------------|
+| `Node.Index` | `Ast.zig:3020-3035` | Basic index type |
+| `Node.OptionalIndex` | `Ast.zig:3038-3050` | Optional with maxInt sentinel |
+| `Index.Range` | `Zoir.zig:151-159` | Contiguous index ranges |
+| Multiple sentinels | `Progress.zig:157-171` | `unused`, `none` states |
+| Accessor pattern | `Ast.zig:88-106` | `ast.nodes.get(index)` |
 
 #### Error Payloads
 Use a tagged union to attach context to errors.
