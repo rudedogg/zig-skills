@@ -42,6 +42,7 @@ Systematic code review checklist organized by detection confidence level. Work t
   - [3.14 Struct Layout](#314-struct-layout)
   - [3.15 Testing Best Practices](#315-testing-best-practices)
   - [3.16 Documentation](#316-documentation)
+  - [3.17 Stateless Context Pattern](#317-stateless-context-pattern)
 - [Quick Reference Card](#quick-reference-card)
 
 ---
@@ -1072,6 +1073,20 @@ pub fn format(uri: *const Uri, writer: *Writer) Writer.Error!void {
 }
 ```
 
+**Also applies to payload captures:**
+
+```zig
+// COPIES on each iteration (if Target is large)
+if (m.resolved_target) |target| {
+    if (!target.query.isNative()) { ... }
+}
+
+// BETTER: Capture by pointer
+if (m.resolved_target) |*target| {
+    if (!target.query.isNative()) { ... }
+}
+```
+
 ### 3.7 Format Method Missing {f} Usage
 
 **Observation:** Custom type has `format` method but documentation/examples use `{}`
@@ -1098,6 +1113,16 @@ std.debug.print("{f}", .{version});
 ### 3.8 Style Guide Violations (not caught by zig fmt)
 
 These style issues require human review—`zig fmt` won't catch them.
+
+**Naming conventions:**
+
+| Element | Convention | Example |
+|---------|-----------|---------|
+| Types | `TitleCase` | `XmlParser`, `HashMap` |
+| Namespace structs | `snake_case` | `std.json`, `std.mem` |
+| Functions | `camelCase` | `readU32Be`, `parseJson` |
+| Type-returning functions | `TitleCase` | `ArrayList`, `HashMap` |
+| Variables/constants | `snake_case` | `const_name`, `file_path` |
 
 **Acronym casing** - Treat acronyms as regular words:
 ```zig
@@ -1441,6 +1466,31 @@ pub fn parse(input: []const u8, opts: Options) !Ast {
 - Error conditions
 - Ownership/lifetime requirements
 - Usage example for non-obvious APIs
+
+### 3.17 Stateless Context Pattern
+
+**Observation:** Method has `self` parameter that's never used
+
+**Suggestion:** Use `_: @This()` to indicate stateless context
+
+```zig
+// ANTI-PATTERN: Named self parameter that's never used
+const CaseSensitive = struct {
+    pub fn eql(self: @This(), a: []const u8, b: []const u8) bool {
+        _ = self;  // Unused!
+        return std.mem.eql(u8, a, b);
+    }
+};
+
+// BETTER: Underscore indicates stateless context
+const CaseSensitive = struct {
+    pub fn eql(_: @This(), a: []const u8, b: []const u8) bool {
+        return std.mem.eql(u8, a, b);
+    }
+};
+```
+
+This pattern is common for context types passed to hash maps and other generic containers that require a consistent interface but don't need instance state.
 
 ---
 
