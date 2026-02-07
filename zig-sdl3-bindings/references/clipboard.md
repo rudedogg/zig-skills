@@ -12,7 +12,7 @@ try sdl3.clipboard.setText("Hello, World!");
 
 // Paste text from clipboard
 if (sdl3.clipboard.getText()) |text| {
-    defer sdl3.c.SDL_free(text);
+    defer sdl3.free(text);
     std.debug.print("Clipboard: {s}\n", .{text});
 }
 
@@ -29,7 +29,7 @@ if (sdl3.clipboard.hasText()) {
 try sdl3.clipboard.setPrimarySelectionText("Selected text");
 
 if (sdl3.clipboard.getPrimarySelectionText()) |text| {
-    defer sdl3.c.SDL_free(text);
+    defer sdl3.free(text);
     // Use selected text
 }
 
@@ -143,7 +143,7 @@ while (sdl3.events.poll()) |event| {
 
 ```zig
 const TextEditor = struct {
-    text: std.ArrayList(u8),
+    text: std.ArrayList(u8) = .empty,
     selection_start: usize = 0,
     selection_end: usize = 0,
     allocator: std.mem.Allocator,
@@ -170,10 +170,10 @@ const TextEditor = struct {
 
     fn paste(self: *TextEditor) !void {
         if (sdl3.clipboard.getText()) |text| {
-            defer sdl3.c.SDL_free(text);
+            defer sdl3.free(text);
 
             self.deleteSelection();
-            try self.text.insertSlice(self.selection_start, text);
+            try self.text.insertSlice(self.allocator, self.selection_start, text);
             self.selection_start += text.len;
             self.selection_end = self.selection_start;
         }
@@ -185,7 +185,7 @@ const TextEditor = struct {
         const start = @min(self.selection_start, self.selection_end);
         const end = @max(self.selection_start, self.selection_end);
 
-        self.text.replaceRange(start, end, &[_]u8{}) catch {};
+        self.text.replaceRange(self.allocator, start, end, &[_]u8{}) catch {};
         self.selection_start = start;
         self.selection_end = start;
     }
@@ -225,7 +225,7 @@ fn pasteImageFromClipboard() !?sdl3.surface.Surface {
     if (sdl3.clipboard.hasData("image/png")) {
         var size: usize = undefined;
         if (sdl3.clipboard.getData("image/png", &size)) |data| {
-            defer sdl3.c.SDL_free(data);
+            defer sdl3.free(data);
             return try decodePngToSurface(data[0..size]);
         }
     }
@@ -234,7 +234,7 @@ fn pasteImageFromClipboard() !?sdl3.surface.Surface {
     if (sdl3.clipboard.hasData("image/bmp")) {
         var size: usize = undefined;
         if (sdl3.clipboard.getData("image/bmp", &size)) |data| {
-            defer sdl3.c.SDL_free(data);
+            defer sdl3.free(data);
             return try decodeBmpToSurface(data[0..size]);
         }
     }

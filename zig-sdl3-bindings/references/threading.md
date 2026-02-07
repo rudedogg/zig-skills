@@ -187,27 +187,28 @@ const sdl3 = @import("sdl3");
 const Queue = struct {
     mutex: sdl3.mutex.Mutex,
     not_empty: sdl3.mutex.Condition,
-    items: std.ArrayList(Item),
+    items: std.ArrayList(Item) = .empty,
+    allocator: std.mem.Allocator,
 
     fn init(allocator: std.mem.Allocator) !Queue {
         return .{
             .mutex = try sdl3.mutex.Mutex.init(),
             .not_empty = try sdl3.mutex.Condition.init(),
-            .items = std.ArrayList(Item).init(allocator),
+            .allocator = allocator,
         };
     }
 
     fn deinit(self: *Queue) void {
         self.not_empty.deinit();
         self.mutex.deinit();
-        self.items.deinit();
+        self.items.deinit(self.allocator);
     }
 
     fn push(self: *Queue, item: Item) !void {
         self.mutex.lock();
         defer self.mutex.unlock();
 
-        try self.items.append(item);
+        try self.items.append(self.allocator, item);
         self.not_empty.signal();  // Wake one waiting thread
     }
 
@@ -324,17 +325,31 @@ const ThreadPool = struct {
     };
 
     fn init(allocator: std.mem.Allocator, num_threads: usize) !ThreadPool {
+        const threads = try allocator.alloc(sdl3.thread.Thread, num_threads);
+        errdefer allocator.free(threads);
+
+        var queue = try Queue.init(allocator);
+        errdefer queue.deinit();
+
         var pool = ThreadPool{
-            .threads = try allocator.alloc(sdl3.thread.Thread, num_threads),
-            .queue = try Queue.init(allocator),
+            .threads = threads,
+            .queue = queue,
             .running = std.atomic.Value(bool).init(true),
             .allocator = allocator,
         };
+
+        var started: usize = 0;
+        errdefer {
+            pool.running.store(false, .seq_cst);
+            for (0..started) |_| pool.queue.not_empty.signal();
+            for (pool.threads[0..started]) |thread| _ = thread.wait();
+        }
 
         for (pool.threads, 0..) |*thread, i| {
             var name_buf: [32]u8 = undefined;
             const name = std.fmt.bufPrint(&name_buf, "Worker-{}", .{i}) catch "Worker";
             thread.* = try sdl3.thread.Thread.init(*ThreadPool, workerLoop, name, &pool);
+            started += 1;
         }
 
         return pool;

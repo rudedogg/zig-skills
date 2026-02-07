@@ -243,7 +243,7 @@ switch (position) {
 ```zig
 const Recorder = struct {
     camera: sdl3.camera.Camera,
-    frames: std.ArrayList(sdl3.surface.Surface),
+    frames: std.ArrayList(sdl3.surface.Surface) = .empty,
     recording: bool = false,
 
     fn startRecording(self: *Recorder) void {
@@ -260,7 +260,7 @@ const Recorder = struct {
             if (self.recording) {
                 // Copy frame (acquireFrame returns temporary surface)
                 const copy = try frame.duplicate();
-                try self.frames.append(copy);
+                try self.frames.append(allocator, copy);
             }
             self.camera.releaseFrame(frame);
         }

@@ -187,7 +187,7 @@ fn audioCallback(
     const samples = generateAudio(&buffer, @intCast(additional_amount));
 
     // Push to stream
-    stream.put(samples) catch {};
+    stream.put(samples) catch |err| std.log.err("audio put failed: {}", .{err});
 }
 
 // Set callback
@@ -199,7 +199,7 @@ stream.setGetCallback(MyAudioState, audioCallback, my_state);
 ```zig
 const AudioMixer = struct {
     device: sdl3.audio.Device,
-    streams: std.ArrayList(sdl3.audio.Stream),
+    streams: std.ArrayList(sdl3.audio.Stream) = .empty,
     allocator: std.mem.Allocator,
 
     fn init(allocator: std.mem.Allocator) !AudioMixer {
@@ -211,7 +211,6 @@ const AudioMixer = struct {
 
         return .{
             .device = device,
-            .streams = std.ArrayList(sdl3.audio.Stream).init(allocator),
             .allocator = allocator,
         };
     }
@@ -220,7 +219,7 @@ const AudioMixer = struct {
         for (self.streams.items) |stream| {
             stream.deinit();
         }
-        self.streams.deinit();
+        self.streams.deinit(self.allocator);
         self.device.close();
     }
 
@@ -234,7 +233,7 @@ const AudioMixer = struct {
         // Queue the sound data
         try stream.put(wav_data);
 
-        self.streams.append(stream) catch {};
+        self.streams.append(self.allocator, stream) catch |err| std.log.err("stream append failed: {}", .{err});
     }
 
     fn update(self: *AudioMixer) void {
@@ -278,15 +277,15 @@ pub fn main() !void {
     // Start recording
     try stream.resume();
 
-    var recording: std.ArrayList(u8) = .init(allocator);
-    defer recording.deinit();
+    var recording: std.ArrayList(u8) = .empty;
+    defer recording.deinit(allocator);
 
     // Record for 5 seconds
     const start = sdl3.timer.getMillisecondsSinceInit();
     while (sdl3.timer.getMillisecondsSinceInit() - start < 5000) {
         var buffer: [4096]u8 = undefined;
         if (stream.get(&buffer)) |data| {
-            recording.appendSlice(data) catch {};
+            recording.appendSlice(allocator, data) catch |err| std.log.err("recording append failed: {}", .{err});
         }
         sdl3.timer.delayMilliseconds(10);
     }

@@ -218,37 +218,39 @@ fn renderWrapped(font: sdl3.ttf.Font, text: []const u8, max_width: c_int, color:
 
 // Or manual wrapping
 fn wrapText(font: sdl3.ttf.Font, text: []const u8, max_width: u32, allocator: std.mem.Allocator) ![][]const u8 {
-    var lines = std.ArrayList([]const u8).init(allocator);
-    var current_line = std.ArrayList(u8).init(allocator);
-    var words = std.mem.split(u8, text, " ");
+    var lines: std.ArrayList([]const u8) = .empty;
+    var current_line: std.ArrayList(u8) = .empty;
+    var words = std.mem.splitScalar(u8, text, ' ');
 
     while (words.next()) |word| {
         // Check if word fits
-        const test_line = if (current_line.items.len > 0)
-            try std.fmt.allocPrint(allocator, "{s} {s}", .{current_line.items, word})
+        const allocated = current_line.items.len > 0;
+        const test_line = if (allocated)
+            try std.fmt.allocPrint(allocator, "{s} {s}", .{ current_line.items, word })
         else
             word;
+        defer if (allocated) allocator.free(test_line);
 
         const size = try font.getStringSize(test_line);
 
         if (size[0] > max_width and current_line.items.len > 0) {
             // Start new line
-            try lines.append(try current_line.toOwnedSlice());
+            try lines.append(allocator, try current_line.toOwnedSlice(allocator));
             current_line.clearRetainingCapacity();
-            try current_line.appendSlice(word);
+            try current_line.appendSlice(allocator, word);
         } else {
             if (current_line.items.len > 0) {
-                try current_line.append(' ');
+                try current_line.append(allocator, ' ');
             }
-            try current_line.appendSlice(word);
+            try current_line.appendSlice(allocator, word);
         }
     }
 
     if (current_line.items.len > 0) {
-        try lines.append(try current_line.toOwnedSlice());
+        try lines.append(allocator, try current_line.toOwnedSlice(allocator));
     }
 
-    return lines.toOwnedSlice();
+    return lines.toOwnedSlice(allocator);
 }
 ```
 

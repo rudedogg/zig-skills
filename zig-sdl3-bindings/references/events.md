@@ -273,7 +273,7 @@ switch (event) {
     .gamepad_added => |g| {
         // Controller connected
         const gamepad = try sdl3.gamepad.Gamepad.open(g.which);
-        controllers.append(gamepad);
+        controllers.append(allocator, gamepad);
     },
 
     .gamepad_removed => |g| {

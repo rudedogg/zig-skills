@@ -239,8 +239,8 @@ try sdl3.mouse.Cursor.set(default);
 ```zig
 // Get mouse position in focused window
 const state = sdl3.mouse.getState();
-const x = state.x;
-const y = state.y;
+const x = state[1];
+const y = state[2];
 ```
 
 ### Global Coordinates
@@ -248,8 +248,8 @@ const y = state.y;
 ```zig
 // Get mouse position on screen
 const global = sdl3.mouse.getGlobalState();
-const screen_x = global.x;
-const screen_y = global.y;
+const screen_x = global[1];
+const screen_y = global[2];
 ```
 
 ### Warp Mouse

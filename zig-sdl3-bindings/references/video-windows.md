@@ -198,7 +198,7 @@ if (props.wayland_xdg_surface) |surface| {
 // Get all displays
 var count: c_int = undefined;
 const displays = try sdl3.video.getDisplays(&count);
-defer sdl3.c.SDL_free(displays);
+defer sdl3.free(displays);
 
 for (displays[0..@intCast(count)]) |display| {
     const name = try display.getName();

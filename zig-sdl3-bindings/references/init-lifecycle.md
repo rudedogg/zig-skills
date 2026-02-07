@@ -98,7 +98,7 @@ pub fn main() !void {
     try sdl3.setAppMetadataProperty(.version, "1.0.0");
     try sdl3.setAppMetadataProperty(.identifier, "com.example.mygame");
     try sdl3.setAppMetadataProperty(.creator, "My Studio");
-    try sdl3.setAppMetadataProperty(.copyright, "Copyright 2024 My Studio");
+    try sdl3.setAppMetadataProperty(.copyright, "Copyright 2026 My Studio");
     try sdl3.setAppMetadataProperty(.url, "https://example.com/mygame");
     try sdl3.setAppMetadataProperty(.program_type, "game");
 

@@ -12,7 +12,7 @@ const sdl3 = @import("sdl3");
 
 pub fn main() !void {
     // Create your allocator
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    var gpa: std.heap.DebugAllocator(.{}) = .init;
     defer _ = gpa.deinit();
 
     // Set SDL to use it (must be done before any SDL calls)
@@ -154,8 +154,8 @@ window.deinit();  // May crash - freed with wrong allocator
 The allocator should be thread-safe if using SDL from multiple threads:
 
 ```zig
-// GeneralPurposeAllocator is thread-safe by default
-var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+// DebugAllocator is thread-safe
+var gpa: std.heap.DebugAllocator(.{}) = .init;
 _ = try sdl3.setMemoryFunctionsByAllocator(gpa.allocator());
 
 // Or use thread-safe wrapper
@@ -214,19 +214,19 @@ pub fn main() !void {
 
 ## Freeing SDL Memory
 
-Some SDL functions return memory that must be freed with SDL_free:
+Some SDL functions return memory that must be freed with sdl3.free():
 
 ```zig
 // Example: clipboard returns SDL-allocated string
 if (sdl3.clipboard.getText()) |text| {
-    defer sdl3.c.SDL_free(@constCast(@ptrCast(text.ptr)));
+    defer sdl3.free(text);
     // Use text...
 }
 
 // Example: getting MIME types
 var num_types: usize = undefined;
 const mime_types = try sdl3.clipboard.getMimeTypes(&num_types);
-defer sdl3.c.SDL_free(mime_types);
+defer sdl3.free(mime_types);
 ```
 
 When using a custom allocator, `SDL_free` routes through your free function.

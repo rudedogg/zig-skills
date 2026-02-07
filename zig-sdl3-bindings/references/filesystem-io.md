@@ -13,12 +13,12 @@ const base_path = try sdl3.filesystem.getBasePath();
 
 // Get preference path (writable location for saves/config)
 const pref_path = try sdl3.filesystem.getPrefPath("MyCompany", "MyGame");
-defer sdl3.c.SDL_free(pref_path);
+defer sdl3.free(pref_path);
 // Example: "/Users/name/Library/Application Support/MyCompany/MyGame/"
 
 // Get current working directory
 const cwd = try sdl3.filesystem.getCurrentDirectory();
-defer sdl3.c.SDL_free(cwd);
+defer sdl3.free(cwd);
 ```
 
 ### User Folders

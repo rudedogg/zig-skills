@@ -71,7 +71,7 @@ while (sdl3.events.poll()) |event| {
     switch (event) {
         .text_input => |t| {
             // t.text is UTF-8 encoded
-            textBuffer.appendSlice(t.text);
+            textBuffer.appendSlice(allocator, t.text);
         },
 
         .text_editing => |t| {

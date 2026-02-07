@@ -200,10 +200,11 @@ const SaveManager = struct {
     }
 
     fn listSlots(self: *SaveManager) ![]u32 {
-        var slots = std.ArrayList(u32).init(self.allocator);
+        var slots: std.ArrayList(u32) = .empty;
 
         const Ctx = struct {
             list: *std.ArrayList(u32),
+            alloc: std.mem.Allocator,
 
             fn callback(ctx: *@This(), storage: sdl3.storage.Storage, path: [:0]const u8) sdl3.storage.EnumerationResult {
                 _ = storage;
@@ -211,17 +212,17 @@ const SaveManager = struct {
                 if (std.mem.startsWith(u8, path, "slot") and std.mem.endsWith(u8, path, ".sav")) {
                     const num_str = path[4..path.len-4];
                     if (std.fmt.parseInt(u32, num_str, 10)) |num| {
-                        ctx.list.append(num) catch {};
+                        ctx.list.append(ctx.alloc, num) catch {};
                     } else |_| {}
                 }
                 return .continue_;
             }
         };
 
-        var ctx = Ctx{ .list = &slots };
+        var ctx = Ctx{ .list = &slots, .alloc = self.allocator };
         try self.storage.enumerateDirectory("saves", *Ctx, Ctx.callback, &ctx);
 
-        return slots.toOwnedSlice();
+        return slots.toOwnedSlice(self.allocator);
     }
 
     fn deleteSlot(self: *SaveManager, slot: u32) !void {

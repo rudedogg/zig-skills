@@ -81,11 +81,11 @@ fn handleClient(socket: sdl3.net.StreamSocket) void {
 
     var buffer: [1024]u8 = undefined;
     while (true) {
-        const bytes = socket.recv(&buffer) catch break;
+        const bytes = socket.read(&buffer) catch break;
         if (bytes == 0) break;
 
         // Echo back
-        socket.send(buffer[0..bytes]) catch break;
+        socket.write(buffer[0..bytes]) catch break;
     }
 }
 ```
@@ -115,7 +115,7 @@ if (ready_count > 0) {
     if (set.isReady(client_socket)) {
         // Client has data
         var buffer: [1024]u8 = undefined;
-        const bytes = client_socket.recv(&buffer) catch {
+        const bytes = client_socket.read(&buffer) catch {
             set.remove(client_socket);
             client_socket.deinit();
             continue;
@@ -165,7 +165,7 @@ const Packet = struct {
 
 const GameServer = struct {
     server: sdl3.net.Server,
-    clients: std.ArrayList(Client),
+    clients: std.ArrayList(Client) = .empty,
     set: sdl3.net.SocketSet,
 
     const Client = struct {
@@ -181,7 +181,6 @@ const GameServer = struct {
 
         return .{
             .server = server,
-            .clients = std.ArrayList(Client).init(allocator),
             .set = set,
         };
     }
@@ -203,7 +202,7 @@ const GameServer = struct {
             const client = &self.clients.items[i];
             if (self.set.isReady(client.socket)) {
                 var packet: Packet = undefined;
-                if (client.socket.recv(std.mem.asBytes(&packet))) |bytes| {
+                if (client.socket.read(std.mem.asBytes(&packet))) |bytes| {
                     if (bytes == 0) {
                         self.removeClient(i);
                         continue;
@@ -221,13 +220,13 @@ const GameServer = struct {
     fn broadcast(self: *GameServer, packet: *const Packet) void {
         const data = std.mem.asBytes(packet);
         for (self.clients.items) |client| {
-            client.socket.send(data) catch {};
+            client.socket.write(data) catch {};
         }
     }
 
     fn addClient(self: *GameServer, socket: sdl3.net.StreamSocket) !void {
         try self.set.add(socket);
-        try self.clients.append(.{
+        try self.clients.append(allocator, .{
             .socket = socket,
             .id = getNextId(),
             .name = undefined,
@@ -271,12 +270,12 @@ const GameClient = struct {
     }
 
     fn send(self: *GameClient, packet: *const Packet) !void {
-        try self.socket.send(std.mem.asBytes(packet));
+        try self.socket.write(std.mem.asBytes(packet));
     }
 
     fn recv(self: *GameClient) ?Packet {
         var packet: Packet = undefined;
-        const bytes = self.socket.recv(std.mem.asBytes(&packet)) catch return null;
+        const bytes = self.socket.read(std.mem.asBytes(&packet)) catch return null;
         if (bytes == 0) return null;
         return packet;
     }

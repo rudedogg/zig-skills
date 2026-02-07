@@ -319,7 +319,7 @@ if (info.type == .eraser) {
 
 ```zig
 const Stroke = struct {
-    points: std.ArrayList(Point),
+    points: std.ArrayList(Point) = .empty,
 
     const Point = struct {
         x: f32,
@@ -331,14 +331,12 @@ const Stroke = struct {
 };
 
 var current_stroke: ?Stroke = null;
-var strokes: std.ArrayList(Stroke) = undefined;
+var strokes: std.ArrayList(Stroke) = .empty;
 
 fn handlePenEvent(event: sdl3.events.Event) void {
     switch (event) {
         .pen_down => |p| {
-            current_stroke = .{
-                .points = std.ArrayList(Stroke.Point).init(allocator),
-            };
+            current_stroke = .{};
             addPoint(p.x, p.y, 1.0, 0, 0);
         },
 
@@ -359,7 +357,7 @@ fn handlePenEvent(event: sdl3.events.Event) void {
         .pen_up => |p| {
             if (current_stroke) |stroke| {
                 if (stroke.points.items.len > 0) {
-                    strokes.append(stroke) catch {};
+                    strokes.append(allocator, stroke) catch |err| std.log.err("stroke append failed: {}", .{err});
                 }
             }
             current_stroke = null;
@@ -371,13 +369,13 @@ fn handlePenEvent(event: sdl3.events.Event) void {
 
 fn addPoint(x: f32, y: f32, pressure: f32, tilt_x: f32, tilt_y: f32) void {
     if (current_stroke) |*stroke| {
-        stroke.points.append(.{
+        stroke.points.append(allocator, .{
             .x = x,
             .y = y,
             .pressure = pressure,
             .tilt_x = tilt_x,
             .tilt_y = tilt_y,
-        }) catch {};
+        }) catch |err| std.log.err("point append failed: {}", .{err});
     }
 }
 ```

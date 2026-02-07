@@ -231,9 +231,10 @@ const ImageCache = struct {
     }
 
     fn deinit(self: *ImageCache) void {
-        var iter = self.textures.valueIterator();
-        while (iter.next()) |texture| {
-            texture.deinit();
+        var iter = self.textures.iterator();
+        while (iter.next()) |entry| {
+            entry.value_ptr.deinit();
+            self.allocator.free(entry.key_ptr.*);
         }
         self.textures.deinit();
     }
