@@ -26,9 +26,9 @@ if (props.get("name")) |prop| {
     std.debug.print("Name: {s}\n", .{name});
 }
 
-// Check existence and type
-if (props.has("count")) {
-    const prop_type = props.getType("count");  // .number
+// Check existence
+if (props.get("count")) |_| {
+    // property exists
 }
 
 // Clear a property

@@ -15,11 +15,11 @@ while (sdl3.events.poll()) |event| {
             const y = m.y;
 
             // Relative movement since last event
-            const dx = m.xrel;
-            const dy = m.yrel;
+            const dx = m.x_rel;
+            const dy = m.y_rel;
 
             // Which mouse device
-            const mouse_id = m.which;
+            const mouse_id = m.id;
 
             // Button state during motion
             if (m.state.left) {
@@ -67,12 +67,12 @@ while (sdl3.events.poll()) |event| {
 ```zig
 .mouse_wheel => |w| {
     // Scroll amounts (can be fractional for smooth scrolling)
-    const scroll_x = w.x;  // Horizontal
-    const scroll_y = w.y;  // Vertical (positive = up/away)
+    const scroll_x = w.scroll_x;  // Horizontal
+    const scroll_y = w.scroll_y;  // Vertical (positive = up/away)
 
     // Mouse position during scroll
-    const mouse_x = w.mouse_x;
-    const mouse_y = w.mouse_y;
+    const mouse_x = w.x;
+    const mouse_y = w.y;
 
     // Direction hint (for natural scrolling)
     switch (w.direction) {
@@ -119,9 +119,9 @@ try sdl3.mouse.setWindowRelativeMode(window, true);
 while (sdl3.events.poll()) |event| {
     switch (event) {
         .mouse_motion => |m| {
-            // In relative mode, use xrel/yrel for camera
-            camera.yaw += m.xrel * sensitivity;
-            camera.pitch += m.yrel * sensitivity;
+            // In relative mode, use x_rel/y_rel for camera
+            camera.yaw += m.x_rel * sensitivity;
+            camera.pitch += m.y_rel * sensitivity;
         },
         else => {},
     }
@@ -156,33 +156,33 @@ try sdl3.mouse.capture(false);
 const sdl3 = @import("sdl3");
 
 // Create system cursor
-const arrow = try sdl3.mouse.Cursor.initSystem(.arrow);
+const arrow = try sdl3.mouse.Cursor.initSystem(.default);
 defer arrow.deinit();
 
 // Set as active cursor
-try sdl3.mouse.setCursor(arrow);
+try sdl3.mouse.set(arrow);
 
 // System cursor types
-.arrow,           // Normal arrow
-.ibeam,           // Text I-beam
-.wait,            // Busy/hourglass
-.crosshair,       // Crosshair
-.waitarrow,       // Arrow with busy
-.sizenwse,        // Resize NW-SE
-.sizenesw,        // Resize NE-SW
-.sizewe,          // Resize W-E
-.sizens,          // Resize N-S
-.sizeall,         // Move all directions
-.no,              // Not allowed
-.hand,            // Pointing hand
-.window_topleft,  // Window resize corners
-.window_top,
-.window_topright,
-.window_right,
-.window_bottomright,
-.window_bottom,
-.window_bottomleft,
-.window_left,
+.default,                       // Normal arrow
+.text,                          // Text I-beam
+.wait,                          // Busy/hourglass
+.crosshair,                     // Crosshair
+.progress,                      // Arrow with busy
+.northwest_southeast_resize,    // Resize NW-SE
+.northeast_southwest_resize,    // Resize NE-SW
+.east_west_resize,              // Resize W-E
+.north_south_resize,            // Resize N-S
+.move,                          // Move all directions
+.not_allowed,                   // Not allowed
+.pointer,                       // Pointing hand
+.north_west_resize,             // Window resize corners
+.north_resize,
+.north_east_resize,
+.east_resize,
+.southeast_resize,
+.south_resize,
+.southwest_resize,
+.west_resize,
 ```
 
 ### Custom Cursors
@@ -199,20 +199,20 @@ const cursor = try sdl3.mouse.Cursor.initColor(
 );
 defer cursor.deinit();
 
-try sdl3.mouse.setCursor(cursor);
+try sdl3.mouse.set(cursor);
 ```
 
 ### Show/Hide Cursor
 
 ```zig
 // Hide cursor
-try sdl3.mouse.Cursor.hide();
+try sdl3.mouse.hide();
 
 // Show cursor
-try sdl3.mouse.Cursor.show();
+try sdl3.mouse.show();
 
 // Check visibility
-if (sdl3.mouse.Cursor.visible()) {
+if (sdl3.mouse.visible()) {
     // Cursor shown
 }
 ```
@@ -221,10 +221,10 @@ if (sdl3.mouse.Cursor.visible()) {
 
 ```zig
 // Get default cursor
-const default = try sdl3.mouse.Cursor.getDefault();
+const default_cursor = try sdl3.mouse.getDefault();
 
 // Reset to default
-try sdl3.mouse.Cursor.set(default);
+try sdl3.mouse.set(default_cursor);
 ```
 
 ## Mouse Position
@@ -259,21 +259,21 @@ try sdl3.mouse.warpGlobal(1000, 500);
 while (sdl3.events.poll()) |event| {
     switch (event) {
         .mouse_added => |m| {
-            const mouse_id = m.which;
+            const mouse_id = m.id;
             // New mouse connected
         },
 
         .mouse_removed => |m| {
-            const mouse_id = m.which;
+            const mouse_id = m.id;
             // Mouse disconnected
         },
 
         .mouse_motion => |m| {
-            if (m.which == sdl3.mouse.ID.touch) {
+            if (m.id == sdl3.mouse.Id.touch) {
                 // This is touch emulating mouse
                 return;
             }
-            if (m.which == sdl3.mouse.ID.pen) {
+            if (m.id == sdl3.mouse.Id.pen) {
                 // This is pen emulating mouse
                 return;
             }
@@ -420,10 +420,10 @@ if (sdl3.mouse.getFocus()) |focused_window| {
 }
 
 // Set mouse grab (confine mouse to window)
-try window.setMouseGrab(true);
+try sdl3.mouse.setWindowGrab(window, true);
 
 // Check mouse grab
-if (window.getMouseGrab()) {
+if (sdl3.mouse.getWindowGrab(window)) {
     // Mouse confined to window
 }
 ```

@@ -78,7 +78,7 @@ try sdl3.errors.invalidParamError("window");
 const sdl3 = @import("sdl3");
 
 // Log to application category with info priority
-try sdl3.log.log("Application started with {} args", .{args.len});
+sdl3.log.Category.application.logInfo("Application started with {} args", .{args.len});
 ```
 
 ### Log Categories
@@ -255,7 +255,7 @@ pub fn main() !void {
     sdl3.log.setLogOutputFunction(DebugLogger, DebugLogger.logCallback, &logger);
     sdl3.log.setAllPriorities(.debug);
 
-    try sdl3.log.log("Application starting", .{});
+    sdl3.log.Category.application.logInfo("Application starting", .{});
     // ...
 }
 ```

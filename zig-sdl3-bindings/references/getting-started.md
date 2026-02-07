@@ -10,7 +10,7 @@
     .version = "0.1.0",
     .dependencies = .{
         .sdl3 = .{
-            .url = "git+https://github.com/Deins/zig-sdl3.git#main",
+            .url = "git+https://codeberg.org/7Games/zig-sdl3#main",
             .hash = "...",  // Leave empty first, get from build error
         },
     },

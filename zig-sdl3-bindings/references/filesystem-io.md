@@ -42,8 +42,8 @@ const templates = try sdl3.filesystem.getUserFolder(.templates);
 .downloads,
 .music,
 .pictures,
-.publicshare,
-.savedgames,
+.public_share,
+.saved_games,
 .screenshots,
 .templates,
 .videos,
@@ -55,9 +55,9 @@ const templates = try sdl3.filesystem.getUserFolder(.templates);
 // Get information about a path
 const info = try sdl3.filesystem.getPathInfo("/path/to/file");
 
-switch (info.type) {
+switch (info.path_type) {
     .file => {
-        const size = info.size;
+        const size = info.file_size;
         const create_time = info.create_time;
         const modify_time = info.modify_time;
         const access_time = info.access_time;
@@ -77,7 +77,7 @@ switch (info.type) {
 
 ```zig
 // List directory contents
-const items = try sdl3.filesystem.enumerateDirectory("/path/to/dir", allocator);
+const items = try sdl3.filesystem.getAllDirectoryItems(allocator, "/path/to/dir");
 defer allocator.free(items);
 
 for (items) |item| {
@@ -88,17 +88,17 @@ for (items) |item| {
 fn enumCallback(user_data: ?*void, dirname: [:0]const u8, fname: [:0]const u8) sdl3.filesystem.EnumerationResult {
     _ = user_data;
     std.debug.print("{s}/{s}\n", .{dirname, fname});
-    return .continue_;  // Continue enumeration
+    return .run;  // Continue enumeration
 }
 
-try sdl3.filesystem.enumerateDirectoryCallback("/path", void, enumCallback, null);
+try sdl3.filesystem.enumerateDirectory("/path", void, enumCallback, null);
 ```
 
 ### Glob Pattern Matching
 
 ```zig
 // Find files matching pattern
-const matches = try sdl3.filesystem.globDirectory("/path", "*.txt", allocator);
+const matches = try sdl3.filesystem.globDirectory("/path", "*.txt", .{});
 defer {
     for (matches) |m| allocator.free(m);
     allocator.free(matches);
@@ -109,7 +109,7 @@ for (matches) |file| {
 }
 
 // Recursive glob
-const all_zig = try sdl3.filesystem.globDirectory("/project", "**/*.zig", allocator);
+const all_zig = try sdl3.filesystem.globDirectory("/project", "**/*.zig", .{});
 ```
 
 ### Create/Remove Directories
@@ -119,7 +119,7 @@ const all_zig = try sdl3.filesystem.globDirectory("/project", "**/*.zig", alloca
 try sdl3.filesystem.createDirectory("/path/to/new/dir");
 
 // Remove empty directory
-try sdl3.filesystem.removeEmptyDirectory("/path/to/empty");
+try sdl3.filesystem.removePath("/path/to/empty");
 ```
 
 ## File Operations
@@ -127,7 +127,7 @@ try sdl3.filesystem.removeEmptyDirectory("/path/to/empty");
 ### Rename/Move
 
 ```zig
-try sdl3.filesystem.rename("/old/path", "/new/path");
+try sdl3.filesystem.renamePath("/old/path", "/new/path");
 ```
 
 ### Copy

@@ -2,6 +2,8 @@
 
 SDL_ttf provides TrueType font rendering.
 
+**Important:** Call `try sdl3.ttf.init()` before loading any fonts, and `defer sdl3.ttf.quit()` for cleanup.
+
 ## Enable Extension
 
 In build.zig dependency options:
@@ -26,7 +28,7 @@ const font = try sdl3.ttf.Font.init("assets/font.ttf", 24);
 defer font.deinit();
 
 // Load with specific face index (for fonts with multiple faces)
-const font = try sdl3.ttf.Font.initWithIndex("font.ttc", 24, 0);
+const font = try sdl3.ttf.Font.initWithProperties(.{ .filename = "font.ttc", .size = 24, .face = 0 });
 ```
 
 ### Rendering Text
@@ -162,7 +164,7 @@ const TextCache = struct {
         height: u32,
     };
 
-    fn render(self: *TextCache, text: []const u8, color: sdl3.pixels.Color) !CachedText {
+    fn render(self: *TextCache, text: []const u8, color: sdl3.ttf.Color) !CachedText {
         // Check cache
         if (self.textures.get(text)) |cached| {
             return cached;
@@ -185,7 +187,7 @@ const TextCache = struct {
         return cached;
     }
 
-    fn draw(self: *TextCache, text: []const u8, x: f32, y: f32, color: sdl3.pixels.Color) !void {
+    fn draw(self: *TextCache, text: []const u8, x: f32, y: f32, color: sdl3.ttf.Color) !void {
         const cached = try self.render(text, color);
         try self.renderer.renderTexture(cached.texture, null, .{
             .x = x,
@@ -208,7 +210,7 @@ const TextCache = struct {
 ### Word Wrapping
 
 ```zig
-fn renderWrapped(font: sdl3.ttf.Font, text: []const u8, max_width: c_int, color: sdl3.pixels.Color) !sdl3.surface.Surface {
+fn renderWrapped(font: sdl3.ttf.Font, text: []const u8, max_width: c_int, color: sdl3.ttf.Color) !sdl3.surface.Surface {
     return font.renderTextBlendedWrapped(text, color, max_width);
 }
 
@@ -259,7 +261,7 @@ fn renderMultiline(
     lines: []const []const u8,
     x: f32,
     y: f32,
-    color: sdl3.pixels.Color,
+    color: sdl3.ttf.Color,
 ) !void {
     const line_height = @as(f32, @floatFromInt(font.getLineSkip()));
     var current_y = y;
@@ -301,7 +303,7 @@ fn drawAligned(
     y: f32,
     width: f32,
     alignment: Alignment,
-    color: sdl3.pixels.Color,
+    color: sdl3.ttf.Color,
 ) !void {
     const surface = try font.renderTextBlended(text, color);
     defer surface.deinit();

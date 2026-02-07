@@ -34,7 +34,7 @@ pub fn main() !void {
     try stream.resumeDevice();
 
     // Wait for playback to finish
-    while (stream.getQueued() > 0) {
+    while (try stream.getQueued() > 0) {
         sdl3.timer.delayMilliseconds(100);
     }
 }
@@ -46,17 +46,17 @@ pub fn main() !void {
 const sdl3 = @import("sdl3");
 
 const spec = sdl3.audio.Spec{
-    .format = .s16,       // Signed 16-bit samples
-    .channels = 2,        // Stereo
-    .freq = 44100,        // 44.1 kHz sample rate
+    .format = .signed_16_bit_little_endian,       // Signed 16-bit samples
+    .num_channels = 2,        // Stereo
+    .sample_rate = 44100,        // 44.1 kHz sample rate
 };
 
 // Common formats
-.u8,      // Unsigned 8-bit
-.s8,      // Signed 8-bit
-.s16,     // Signed 16-bit (CD quality)
-.s32,     // Signed 32-bit
-.f32,     // 32-bit float (-1.0 to 1.0)
+.unsigned_8_bit,      // Unsigned 8-bit
+.signed_8_bit,      // Signed 8-bit
+.signed_16_bit_little_endian,     // Signed 16-bit (CD quality)
+.signed_32_bit_little_endian,     // Signed 32-bit
+.floating_32_bit_little_endian,     // 32-bit float (-1.0 to 1.0)
 ```
 
 ## Audio Devices
@@ -98,7 +98,7 @@ defer stream.deinit();
 try device.bindStream(stream);
 
 // Resume device
-try device.resume();
+try device.resumePlayback();
 ```
 
 ### Device Events
@@ -139,15 +139,15 @@ Audio streams handle format conversion, resampling, and buffering.
 
 ```zig
 const source_spec = sdl3.audio.Spec{
-    .format = .s16,
-    .channels = 2,
-    .freq = 44100,
+    .format = .signed_16_bit_little_endian,
+    .num_channels = 2,
+    .sample_rate = 44100,
 };
 
 const dest_spec = sdl3.audio.Spec{
-    .format = .f32,
-    .channels = 2,
-    .freq = 48000,
+    .format = .floating_32_bit_little_endian,
+    .num_channels = 2,
+    .sample_rate = 48000,
 };
 
 // Stream converts from source to dest format
@@ -166,7 +166,7 @@ const data = try stream.getData(output_buffer);
 const bytes_read = data.len;
 
 // Check queued data
-const queued_bytes = stream.getQueued();
+const queued_bytes = try stream.getQueued();
 ```
 
 ### Stream Callbacks
@@ -185,7 +185,7 @@ fn audioCallback(
     const samples = generateAudio(&buffer, @intCast(additional_amount));
 
     // Push to stream
-    stream.put(samples) catch |err| std.log.err("audio put failed: {}", .{err});
+    stream.putData(samples) catch |err| std.log.err("audio put failed: {}", .{err});
 }
 
 // Set callback
@@ -201,10 +201,10 @@ const AudioMixer = struct {
     allocator: std.mem.Allocator,
 
     fn init(allocator: std.mem.Allocator) !AudioMixer {
-        const device = try sdl3.audio.Device.open(.default_playback, &.{
-            .format = .f32,
-            .channels = 2,
-            .freq = 48000,
+        const device = try sdl3.audio.Device.default_playback.open(.{
+            .format = .floating_32_bit_little_endian,
+            .num_channels = 2,
+            .sample_rate = 48000,
         });
 
         return .{
@@ -223,13 +223,13 @@ const AudioMixer = struct {
 
     fn playSound(self: *AudioMixer, wav_data: []const u8, spec: sdl3.audio.Spec) !void {
         // Create stream for this sound
-        const stream = try sdl3.audio.Stream.init(&spec, &self.device.getFormat());
+        const stream = try sdl3.audio.Stream.init(spec, self.device.getFormat());
 
         // Bind to device (device mixes all bound streams)
         try self.device.bindStream(stream);
 
         // Queue the sound data
-        try stream.put(wav_data);
+        try stream.putData(wav_data);
 
         self.streams.append(self.allocator, stream) catch |err| std.log.err("stream append failed: {}", .{err});
     }
@@ -238,7 +238,7 @@ const AudioMixer = struct {
         // Remove finished streams
         var i: usize = 0;
         while (i < self.streams.items.len) {
-            if (self.streams.items[i].getQueued() == 0) {
+            if ((try self.streams.items[i].getQueued()) == 0) {
                 self.streams.items[i].deinit();
                 _ = self.streams.swapRemove(i);
             } else {
@@ -258,22 +258,22 @@ pub fn main() !void {
     defer sdl3.quit(.{ .audio = true });
 
     const spec = sdl3.audio.Spec{
-        .format = .s16,
-        .channels = 1,
-        .freq = 16000,
+        .format = .signed_16_bit_little_endian,
+        .num_channels = 1,
+        .sample_rate = 16000,
     };
 
     // Open recording device
-    const stream = try sdl3.audio.Device.openStream(
-        .default_recording,
-        &spec,
+    const stream = try sdl3.audio.Device.default_recording.openStream(
+        spec,
+        void,
         null,
         null,
     );
     defer stream.deinit();
 
     // Start recording
-    try stream.resume();
+    try stream.resumeDevice();
 
     var recording: std.ArrayList(u8) = .empty;
     defer recording.deinit(allocator);
@@ -282,7 +282,7 @@ pub fn main() !void {
     const start = sdl3.timer.getMillisecondsSinceInit();
     while (sdl3.timer.getMillisecondsSinceInit() - start < 5000) {
         var buffer: [4096]u8 = undefined;
-        if (stream.get(&buffer)) |data| {
+        if (stream.getData(&buffer)) |data| {
             recording.appendSlice(allocator, data) catch |err| std.log.err("recording append failed: {}", .{err});
         }
         sdl3.timer.delayMilliseconds(10);
@@ -297,14 +297,13 @@ pub fn main() !void {
 ### WAV Files (Built-in)
 
 ```zig
-// Load WAV
-var spec: sdl3.audio.Spec = undefined;
-const data = try sdl3.audio.loadWav("sound.wav", &spec);
-defer sdl3.audio.freeWav(data);
+// Load WAV (returns struct { Spec, []u8 })
+const spec, const data = try sdl3.audio.loadWav("sound.wav");
+defer sdl3.free(data.ptr);
 
 // Load from IO stream
 const io = try sdl3.io_stream.Stream.fromFile("sound.wav", "rb");
-const data = try sdl3.audio.loadWavIo(io, true, &spec);
+const spec2, const data2 = try sdl3.audio.loadWavIo(io, true);
 ```
 
 ### Other Formats
@@ -316,8 +315,8 @@ For MP3, OGG, FLAC, etc., use SDL_mixer or decode yourself:
 const decoded = try myMp3Decoder.decode("music.mp3");
 defer decoded.deinit();
 
-const stream = try sdl3.audio.Stream.init(&decoded.spec, &device_spec);
-try stream.put(decoded.samples);
+const stream = try sdl3.audio.Stream.init(decoded.spec, device_spec);
+try stream.putData(decoded.samples);
 ```
 
 ## Volume Control
@@ -333,16 +332,16 @@ const gain = try stream.getGain();
 
 ```zig
 // Convert audio data between formats
-const source_spec = sdl3.audio.Spec{ .format = .s16, .channels = 2, .freq = 44100 };
-const dest_spec = sdl3.audio.Spec{ .format = .f32, .channels = 2, .freq = 48000 };
+const source_spec = sdl3.audio.Spec{ .format = .signed_16_bit_little_endian, .num_channels = 2, .sample_rate = 44100 };
+const dest_spec = sdl3.audio.Spec{ .format = .floating_32_bit_little_endian, .num_channels = 2, .sample_rate = 48000 };
 
 // Streams convert automatically
-const stream = try sdl3.audio.Stream.init(&source_spec, &dest_spec);
-try stream.put(s16_data);
+const stream = try sdl3.audio.Stream.init(source_spec, dest_spec);
+try stream.putData(s16_data);
 
 // Get converted data
 var output: [8192]u8 = undefined;
-const converted = try stream.get(&output);
+const converted = try stream.getData(&output);
 ```
 
 ## Channel Layouts
@@ -364,14 +363,14 @@ SDL uses standard channel orderings:
 
 ```zig
 // Pause stream
-try stream.pause();
+try stream.pauseDevice();
 
 // Resume stream
-try stream.resume();
+try stream.resumeDevice();
 
 // Pause device (pauses all bound streams)
-try device.pause();
-try device.resume();
+try device.pausePlayback();
+try device.resumePlayback();
 ```
 
 ## Flush and Clear
@@ -397,12 +396,11 @@ const SoundManager = struct {
     };
 
     fn loadSound(self: *SoundManager, name: []const u8, path: []const u8) !void {
-        var spec: sdl3.audio.Spec = undefined;
-        const data = try sdl3.audio.loadWav(path, &spec);
+        const spec, const data = try sdl3.audio.loadWav(path);
 
         // Copy data since loadWav returns temporary buffer
         const owned = try self.allocator.dupe(u8, data);
-        sdl3.audio.freeWav(data);
+        sdl3.free(data.ptr);
 
         try self.sounds.put(name, .{ .data = owned, .spec = spec });
     }

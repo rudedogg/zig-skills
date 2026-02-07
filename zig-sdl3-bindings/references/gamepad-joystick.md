@@ -21,14 +21,14 @@ while (sdl3.events.poll()) |event| {
     switch (event) {
         .gamepad_added => |g| {
             // New controller connected
-            const gamepad = try sdl3.gamepad.Gamepad.init(g.which);
+            const gamepad = try sdl3.gamepad.Gamepad.init(g.id);
             const name = try gamepad.getName();
             std.debug.print("Gamepad connected: {s}\n", .{name});
         },
 
         .gamepad_removed => |g| {
             // Controller disconnected
-            if (getGamepadById(g.which)) |gamepad| {
+            if (getGamepadById(g.id)) |gamepad| {
                 gamepad.deinit();
             }
         },
@@ -277,7 +277,7 @@ defer sdl3.quit(.{ .joystick = true });
 
 // Open joystick
 .joystick_added => |j| {
-    const joystick = try sdl3.joystick.Joystick.init(j.which);
+    const joystick = try sdl3.joystick.Joystick.init(j.id);
 
     const name = try joystick.getName();
     const num_axes = joystick.getNumAxes();

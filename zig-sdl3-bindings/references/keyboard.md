@@ -30,12 +30,12 @@ while (sdl3.events.poll()) |event| {
                 .d => moveRight = true,
                 .space => jump(),
                 .escape => pauseGame(),
-                .f11 => toggleFullscreen(),
+                .func11 => toggleFullscreen(),
                 else => {},
             }
 
             // Logical key (layout-aware)
-            if (k.key == .f and k.mod.ctrl) {
+            if (k.key == .f and k.mod.controlDown()) {
                 openSearchDialog();
             }
 
@@ -85,7 +85,7 @@ while (sdl3.events.poll()) |event| {
             // Handle special keys during text input
             if (k.key == .backspace) {
                 deleteLastCharacter();
-            } else if (k.key == .@"return") {
+            } else if (k.key == .return_key) {
                 submitText();
             }
         },
@@ -145,7 +145,7 @@ fn update(dt: f32) void {
 
 ```zig
 .key_down => |k| {
-    if (k.mod.ctrl) {
+    if (k.mod.controlDown()) {
         // Ctrl held
         switch (k.key) {
             .s => save(),
@@ -156,20 +156,20 @@ fn update(dt: f32) void {
         }
     }
 
-    if (k.mod.shift) {
+    if (k.mod.shiftDown()) {
         // Shift held
     }
 
-    if (k.mod.alt) {
+    if (k.mod.altDown()) {
         // Alt held
     }
 
-    if (k.mod.gui) {
+    if (k.mod.guiDown()) {
         // Windows/Command key held
     }
 
     // Combined modifiers
-    if (k.mod.ctrl and k.mod.shift) {
+    if (k.mod.controlDown() and k.mod.shiftDown()) {
         if (k.key == .s) saveAs();
     }
 }
@@ -180,16 +180,16 @@ fn update(dt: f32) void {
 ```zig
 const mods = sdl3.keyboard.getModState();
 
-if (mods.ctrl) {
+if (mods.controlDown()) {
     // Ctrl currently held
 }
-if (mods.shift) {
+if (mods.shiftDown()) {
     // Shift currently held
 }
-if (mods.caps) {
+if (mods.caps_lock) {
     // Caps Lock active
 }
-if (mods.num) {
+if (mods.num_lock) {
     // Num Lock active
 }
 ```
@@ -198,7 +198,7 @@ if (mods.num) {
 
 ```zig
 // Force Caps Lock on
-try sdl3.keyboard.setModState(.{ .caps = true });
+sdl3.keyboard.setModState(.{ .caps_lock = true });
 ```
 
 ## Common Scancodes
@@ -217,8 +217,8 @@ const sdl3 = @import("sdl3");
 
 ```zig
 // Top row numbers
-.@"1", .@"2", .@"3", .@"4", .@"5",
-.@"6", .@"7", .@"8", .@"9", .@"0"
+.one, .two, .three, .four, .five,
+.six, .seven, .eight, .nine, .zero
 
 // Numpad
 .kp_1, .kp_2, .kp_3, .kp_4, .kp_5,
@@ -228,8 +228,8 @@ const sdl3 = @import("sdl3");
 ### Function Keys
 
 ```zig
-.f1, .f2, .f3, .f4, .f5, .f6,
-.f7, .f8, .f9, .f10, .f11, .f12
+.func1, .func2, .func3, .func4, .func5, .func6,
+.func7, .func8, .func9, .func10, .func11, .func12
 ```
 
 ### Navigation
@@ -244,28 +244,28 @@ const sdl3 = @import("sdl3");
 ### Modifiers
 
 ```zig
-.lshift, .rshift,    // Left/right shift
-.lctrl, .rctrl,      // Left/right control
-.lalt, .ralt,        // Left/right alt
-.lgui, .rgui,        // Left/right Windows/Command
-.capslock,
-.numlockclear,
-.scrolllock
+.left_shift, .right_shift,    // Left/right shift
+.left_ctrl, .right_ctrl,      // Left/right control
+.left_alt, .right_alt,        // Left/right alt
+.left_gui, .right_gui,        // Left/right Windows/Command
+.caps_lock,
+.num_lock_clear,
+.scroll_lock
 ```
 
 ### Common Keys
 
 ```zig
 .space,
-.@"return",      // Enter key
+.return_key,     // Enter key
 .escape,
 .backspace,
 .tab,
 .grave,          // ` and ~
 .minus,          // - and _
 .equals,         // = and +
-.leftbracket,    // [ and {
-.rightbracket,   // ] and }
+.left_bracket,   // [ and {
+.right_bracket,  // ] and }
 .backslash,      // \ and |
 .semicolon,      // ; and :
 .apostrophe,     // ' and "
@@ -278,13 +278,13 @@ const sdl3 = @import("sdl3");
 
 ```zig
 // Get human-readable name for scancode
-const name = sdl3.Scancode.getName(.w);  // "W"
+const name = sdl3.keyboard.getScancodeName(.w);  // "W"
 
 // Get scancode from name
-const scancode = sdl3.Scancode.fromName("W");  // .w
+const scancode = sdl3.keyboard.getScancodeFromName("W");  // .w
 
 // Get human-readable name for keycode
-const key_name = sdl3.keycode.getName(.space);  // "Space"
+const key_name = sdl3.keyboard.getKeyName(.space);  // "Space"
 
 // Convert between scancode and keycode
 const keycode = sdl3.keyboard.getKeyFromScancode(.w, .{}, false);
@@ -348,8 +348,8 @@ for (keyboards) |keyboard_id| {
 
 ```zig
 // Check if on-screen keyboard is shown
-if (sdl3.keyboard.hasScreenKeyboardSupport()) {
-    if (sdl3.keyboard.isScreenKeyboardShown(window)) {
+if (sdl3.keyboard.hasScreenSupport()) {
+    if (sdl3.keyboard.shownOnScreen(window)) {
         // Virtual keyboard visible
     }
 }

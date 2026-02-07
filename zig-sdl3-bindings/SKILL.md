@@ -20,7 +20,7 @@ Idiomatic Zig bindings for SDL3, wrapping the C API with Zig patterns: error uni
 ```zig
 .dependencies = .{
     .sdl3 = .{
-        .url = "git+https://github.com/Deins/zig-sdl3.git#main",
+        .url = "git+https://codeberg.org/7Games/zig-sdl3#main",
         .hash = "...",  // Get from build error on first run
     },
 },
@@ -340,7 +340,7 @@ const window = try sdl3.video.Window.init("Fullscreen", 1920, 1080, .{
     .high_pixel_density = true,   // HiDPI support
     .always_on_top = true,        // Stay above other windows
     .hidden = true,               // Create hidden
-    .opengl = true,               // OpenGL context
+    .open_gl = true,               // OpenGL context
     .vulkan = true,               // Vulkan surface
     .metal = true,                // Metal layer
 }
@@ -348,9 +348,9 @@ const window = try sdl3.video.Window.init("Fullscreen", 1920, 1080, .{
 // Window operations
 try window.setTitle("New Title");
 try window.setSize(1024, 768);
-try window.setPosition(100, 100);
-window.show();
-window.hide();
+try window.setPosition(.{ .absolute = 100 }, .{ .absolute = 100 });
+try window.show();
+try window.hide();
 try window.setFullscreen(true);
 ```
 
@@ -369,24 +369,24 @@ try renderer.clear();
 
 // Draw filled rectangle
 try renderer.setDrawColor(.{ .r = 255, .g = 0, .b = 0, .a = 255 });
-try renderer.fillRect(.{ .x = 100, .y = 100, .w = 200, .h = 150 });
+try renderer.renderFillRect(.{ .x = 100, .y = 100, .w = 200, .h = 150 });
 
 // Draw outline
-try renderer.drawRect(.{ .x = 50, .y = 50, .w = 100, .h = 100 });
+try renderer.renderRect(.{ .x = 50, .y = 50, .w = 100, .h = 100 });
 
 // Draw line
-try renderer.drawLine(.{ .x1 = 0, .y1 = 0, .x2 = 800, .y2 = 600 });
+try renderer.renderLine(.{ .x = 0, .y = 0 }, .{ .x = 800, .y = 600 });
 
 // Draw point
-try renderer.drawPoint(.{ .x = 400, .y = 300 });
+try renderer.renderPoint(.{ .x = 400, .y = 300 });
 
 // Load and draw texture
-const surface = try sdl3.image.load("sprite.png");  // Requires ext_image
+const surface = try sdl3.image.loadFile("sprite.png");  // Requires ext_image
 defer surface.deinit();
 const texture = try renderer.createTextureFromSurface(surface);
 defer texture.deinit();
 
-try renderer.copy(texture, null, .{ .x = 100, .y = 100, .w = 64, .h = 64 });
+try renderer.renderTexture(texture, null, .{ .x = 100, .y = 100, .w = 64, .h = 64 });
 
 // Present frame
 try renderer.present();
@@ -418,7 +418,7 @@ while (sdl3.events.poll()) |event| {
         .mouse_button_down => |m| {
             if (m.button == .left) onClick(m.x, m.y);
         },
-        .mouse_wheel => |w| scroll(w.y),
+        .mouse_wheel => |w| scroll(w.scroll_y),
 
         // Gamepad
         .gamepad_button_down => |g| {
@@ -429,7 +429,7 @@ while (sdl3.events.poll()) |event| {
         },
 
         // Window events
-        .window_resized => |w| resize(w.data1, w.data2),
+        .window_resized => |w| resize(w.width, w.height),
         .window_focus_gained => resumeGame(),
         .window_focus_lost => pauseGame(),
 
@@ -453,24 +453,24 @@ if (sdl3.events.waitTimeout(1000)) |event| {
 ```zig
 const sdl3 = @import("sdl3");
 
-// Load WAV file
+// Load WAV file (returns tuple: Spec + data)
 const spec, const audio_buf = try sdl3.audio.loadWav("sound.wav");
-defer sdl3.audio.freeWav(audio_buf);
+defer sdl3.free(audio_buf.ptr);
 
 // Open audio device
-const device = try sdl3.audio.Device.open(.default_playback, &spec);
+const device = try sdl3.audio.Device.default_playback.open(spec);
 defer device.close();
 
 // Create stream and bind to device
-const stream = try sdl3.audio.Stream.init(&spec, &spec);
+const stream = try sdl3.audio.Stream.init(spec, spec);
 defer stream.deinit();
 try device.bindStream(stream);
 
 // Queue audio data
-try stream.put(audio_buf);
+try stream.putData(audio_buf);
 
 // Resume playback (devices start paused)
-try device.resume();
+try device.resumePlayback();
 ```
 
 ## Module Reference

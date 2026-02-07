@@ -97,7 +97,7 @@ for (cameras) |camera_id| {
 
 ```zig
 // Request specific format
-const desired_spec = sdl3.camera.Spec{
+const desired_spec = sdl3.camera.Specification{
     .format = .rgb24,
     .colorspace = .srgb,
     .width = 1280,
@@ -110,7 +110,7 @@ const camera = try sdl3.camera.Camera.init(camera_id, &desired_spec);
 defer camera.deinit();
 
 // Check actual format (may differ from requested)
-const actual_spec = camera.getFormat();
+const actual_spec = try camera.getFormat();
 std.debug.print("Actual: {}x{}\n", .{actual_spec.width, actual_spec.height});
 ```
 
@@ -130,7 +130,7 @@ switch (camera.getPermissionState()) {
     .denied => {
         return error.CameraAccessDenied;
     },
-    .unknown => {
+    .awaiting => {
         // Wait for user decision via events
     },
 }
@@ -157,8 +157,9 @@ while (sdl3.events.poll()) |event| {
 ## Frame Acquisition
 
 ```zig
-// Non-blocking frame acquisition
-if (camera.acquireFrame()) |frame| {
+// Non-blocking frame acquisition (returns tuple { ?Surface, u64 })
+const maybe_frame, const timestamp = camera.acquireFrame();
+if (maybe_frame) |frame| {
     defer camera.releaseFrame(frame);
 
     // frame is an sdl3.surface.Surface
@@ -167,16 +168,16 @@ if (camera.acquireFrame()) |frame| {
     const format = frame.getFormat();
 
     // Process or display frame...
-
-    // Get frame timestamp (nanoseconds)
-    const timestamp = frame.getTimestamp();
+    // timestamp is in nanoseconds
+    _ = timestamp;
 }
 
 // Wait for frame with timeout
 fn waitForFrame(camera: sdl3.camera.Camera, timeout_ms: u32) ?sdl3.surface.Surface {
     const start = sdl3.timer.getMillisecondsSinceInit();
     while (sdl3.timer.getMillisecondsSinceInit() - start < timeout_ms) {
-        if (camera.acquireFrame()) |frame| {
+        const maybe_frame, _ = camera.acquireFrame();
+        if (maybe_frame) |frame| {
             return frame;
         }
         sdl3.timer.delayMilliseconds(1);
@@ -192,7 +193,7 @@ while (sdl3.events.poll()) |event| {
     switch (event) {
         .camera_device_added => |c| {
             // New camera connected
-            const name = try sdl3.camera.Camera.getName(c.which);
+            const name = try c.which.getName();
             std.debug.print("Camera added: {s}\n", .{name});
             refreshCameraList();
         },
@@ -221,7 +222,7 @@ while (sdl3.events.poll()) |event| {
 
 ```zig
 // Get camera position (front/back on mobile)
-const position = sdl3.camera.Camera.getPosition(camera_id);
+const position = camera_id.getPosition();
 
 switch (position) {
     .front_facing => {
@@ -255,7 +256,8 @@ const Recorder = struct {
     }
 
     fn update(self: *Recorder) !void {
-        if (self.camera.acquireFrame()) |frame| {
+        const maybe_frame, _ = self.camera.acquireFrame();
+        if (maybe_frame) |frame| {
             if (self.recording) {
                 // Copy frame (acquireFrame returns temporary surface)
                 const copy = try frame.duplicate();

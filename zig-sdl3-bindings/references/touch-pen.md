@@ -176,11 +176,12 @@ for (devices) |device_id| {
     const name = try device_id.getName();
     const device_type = device_id.getType();
 
-    // Get active fingers (returns slice directly)
+    // Get active fingers (returns ![]*Finger — slice of pointers)
     const fingers = try device_id.getFingers();
     defer sdl3.free(fingers.ptr);
 
     for (fingers) |finger| {
+        // finger is *Finger; Zig auto-derefs pointer access
         const x = finger.x;
         const y = finger.y;
         const pressure = finger.pressure;
@@ -191,19 +192,19 @@ for (devices) |device_id| {
 ### Touch Device Types
 
 ```zig
-const type = sdl3.touch.getDeviceType(device_id);
-
-switch (type) {
-    .invalid => {},
-    .direct => {
-        // Direct touch (screen touch)
-    },
-    .indirect_absolute => {
-        // Indirect absolute (trackpad with absolute coords)
-    },
-    .indirect_relative => {
-        // Indirect relative (trackpad with relative coords)
-    },
+// getType() is a method on touch Id; returns null for invalid/unknown devices
+if (device_id.getType()) |device_type| {
+    switch (device_type) {
+        .direct => {
+            // Direct touch (screen touch)
+        },
+        .indirect_absolute => {
+            // Indirect absolute (trackpad with absolute coords)
+        },
+        .indirect_relative => {
+            // Indirect relative (trackpad with relative coords)
+        },
+    }
 }
 ```
 
@@ -263,8 +264,8 @@ while (sdl3.events.poll()) |event| {
         .pen_axis => |p| {
             // Axis values changed
             const pressure = p.axes[@intFromEnum(sdl3.pen.Axis.pressure)];
-            const xtilt = p.axes[@intFromEnum(sdl3.pen.Axis.xtilt)];
-            const ytilt = p.axes[@intFromEnum(sdl3.pen.Axis.ytilt)];
+            const xtilt = p.axes[@intFromEnum(sdl3.pen.Axis.x_tilt)];
+            const ytilt = p.axes[@intFromEnum(sdl3.pen.Axis.y_tilt)];
             const rotation = p.axes[@intFromEnum(sdl3.pen.Axis.rotation)];
 
             updateBrush(pressure, xtilt, ytilt);
@@ -282,37 +283,12 @@ const sdl3 = @import("sdl3");
 
 // Available axes (not all pens support all axes)
 .pressure,    // 0.0 to 1.0
-.xtilt,       // -90 to 90 degrees
-.ytilt,       // -90 to 90 degrees
+.x_tilt,      // -90 to 90 degrees
+.y_tilt,      // -90 to 90 degrees
 .distance,    // Distance from surface
 .rotation,    // 0 to 360 degrees
 .slider,      // Barrel slider (0.0 to 1.0)
 .tangential_pressure,  // Airbrush wheel
-```
-
-### Pen Capabilities
-
-```zig
-// Check pen capabilities
-const caps = try sdl3.pen.getCapabilities(pen_id);
-
-if (caps.pressure) {
-    // Pen supports pressure
-}
-if (caps.xtilt and caps.ytilt) {
-    // Pen supports tilt
-}
-if (caps.rotation) {
-    // Pen supports rotation
-}
-
-// Check if pen or eraser
-const info = try sdl3.pen.getInfo(pen_id);
-if (info.type == .eraser) {
-    // Using eraser end
-} else {
-    // Using pen tip
-}
 ```
 
 ### Drawing Application Example

@@ -13,12 +13,12 @@ const sdl3 = @import("sdl3");
 
 // Converting C enum to Zig enum
 const c_value: c.SDL_BlendMode = c.SDL_BLENDMODE_BLEND;
-const blend_mode = sdl3.render.BlendMode.fromSdl(c_value);
-// blend_mode is now ?sdl3.render.BlendMode (.blend or null if invalid)
+const blend_mode = sdl3.blend_mode.Mode.fromSdl(c_value);
+// blend_mode is now ?sdl3.blend_mode.Mode (.blend or null if invalid)
 
 // Converting Zig enum to C enum
-const zig_mode: sdl3.render.BlendMode = .blend;
-const c_mode = sdl3.render.BlendMode.toSdl(zig_mode);
+const zig_mode: sdl3.blend_mode.Mode = .blend;
+const c_mode = sdl3.blend_mode.Mode.toSdl(zig_mode);
 // c_mode is now c.SDL_BlendMode
 ```
 

@@ -155,36 +155,34 @@ try sdl3.system.unsetenv("MY_VAR");
 const sdl3 = @import("sdl3");
 
 // Simple process spawn
-const process = try sdl3.Process.init(&[_][*:0]const u8{
-    "ls", "-la", null,
-}, .{
-    .background = false,  // Wait for completion
-});
+const process = try sdl3.Process.init(&[_:null]?[*:0]const u8{
+    "ls", "-la",
+}, .{});
 defer process.deinit();
 
-// Wait for completion
-const result = try process.wait();
-if (result.exited) {
-    const exit_code = result.exit_code;
-}
+// Read all output and wait for exit (allocates, must free)
+const exit_code, const output_data = try process.readAll();
+defer sdl3.free(output_data.ptr);
 
-// Read output
-var output: [4096]u8 = undefined;
-const bytes = try process.read(&output);
+std.debug.print("Exit code: {}\n", .{exit_code});
+std.debug.print("Output: {s}\n", .{output_data});
 
-// With stdin/stdout pipes
-const process = try sdl3.Process.init(&args, .{
+// Or wait without reading
+const exited = try process.wait(true);  // true = block until done
+
+// With stdin/stdout pipes (use properties)
+const process2 = try sdl3.Process.initWithProperties(.{
+    .args = &[_:null]?[*:0]const u8{ "cat" },
     .stdin_pipe = true,
     .stdout_pipe = true,
 });
+defer process2.deinit();
 
-// Write to stdin
-const input = process.getInput();
-try input.write("input data");
-
-// Read from stdout
-const output_stream = process.getOutput();
-const data = try output_stream.read(&buffer);
+// Get I/O streams (SDL_IOStream wrappers)
+const input_stream = process2.getInput();
+const output_stream = process2.getOutput();
+_ = input_stream;
+_ = output_stream;
 ```
 
 ## Open URL
@@ -203,8 +201,8 @@ try sdl3.openURL("file:///path/to/file.pdf");
 
 ```zig
 if (sdl3.platform.is_windows) {
-    // Get Windows message
-    const msg = sdl3.system.windows.getMessage();
+    // Set Windows message hook (callback for Win32 messages)
+    sdl3.system.windows.setMessageHook(void, myMessageHook, null);
 
     // Direct3D device access (when using D3D renderer)
     const d3d_device = renderer.getProperties().d3d11_device;

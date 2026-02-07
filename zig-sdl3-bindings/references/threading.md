@@ -131,15 +131,15 @@ const SharedData = struct {
     }
 
     fn read(self: *SharedData) []const u8 {
-        self.rwlock.lockRead();
-        defer self.rwlock.unlockRead();
+        self.rwlock.lockForReading();
+        defer self.rwlock.unlock();
 
         return self.data;
     }
 
     fn write(self: *SharedData, new_data: []const u8) void {
-        self.rwlock.lockWrite();
-        defer self.rwlock.unlockWrite();
+        self.rwlock.lockForWriting();
+        defer self.rwlock.unlock();
 
         @memcpy(self.data[0..new_data.len], new_data);
     }
@@ -156,7 +156,7 @@ const sem = try sdl3.mutex.Semaphore.init(5);  // 5 permits
 defer sem.deinit();
 
 // Acquire (blocks if count is 0)
-try sem.wait();
+sem.wait();
 
 // Try acquire (non-blocking)
 if (sem.tryWait()) {
@@ -173,7 +173,7 @@ if (sem.waitTimeout(1000)) {
 }
 
 // Release (increment count)
-try sem.signal();
+sem.signal();
 
 // Get current count
 const count = sem.getValue();
@@ -302,11 +302,8 @@ fn ensureInitialized() void {
     if (init_state.shouldInit()) {
         // First thread to reach here does initialization
         doExpensiveInit();
-        init_state.complete(true);  // Mark as initialized
+        init_state.setInitialized(true);  // Mark as initialized
     }
-
-    // Wait for initialization to complete
-    init_state.waitComplete();
 }
 ```
 

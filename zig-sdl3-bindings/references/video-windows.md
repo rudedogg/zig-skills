@@ -28,7 +28,7 @@ const window = try sdl3.video.Window.init("Game", 1920, 1080, .{
     .maximized = true,            // Start maximized
 
     // Rendering
-    .opengl = true,               // Create OpenGL context
+    .open_gl = true,               // Create OpenGL context
     .vulkan = true,               // Create Vulkan surface
     .metal = true,                // Create Metal layer
 
@@ -77,20 +77,20 @@ defer window.deinit();
 
 ```zig
 // Get size
-const size = try window.getSize();
-std.debug.print("Window: {}x{}\n", .{size.width, size.height});
+const width, const height = try window.getSize();
+std.debug.print("Window: {}x{}\n", .{width, height});
 
 // Get pixel size (differs on HiDPI)
-const pixel_size = try window.getSizeInPixels();
+const pixel_width, const pixel_height = try window.getSizeInPixels();
 
 // Set size
 try window.setSize(1024, 768);
 
 // Get position
-const pos = try window.getPosition();
+const pos_x, const pos_y = try window.getPosition();
 
 // Set position
-try window.setPosition(100, 100);
+try window.setPosition(.{ .absolute = 100 }, .{ .absolute = 100 });
 
 // Center on screen
 try window.setPosition(
@@ -108,14 +108,11 @@ try window.restore();
 
 ```zig
 // Show/hide
-window.show();
-window.hide();
+try window.show();
+try window.hide();
 
 // Raise to front
 try window.raise();
-
-// Set input focus
-try window.setInputFocus();
 
 // Check flags
 const flags = window.getFlags();
@@ -134,7 +131,7 @@ try window.setFullscreen(true);
 try window.setFullscreen(false);
 
 // Set fullscreen mode
-const display = try window.getDisplay();
+const display = try window.getDisplayForWindow();
 const mode = try display.getDesktopMode();
 try window.setFullscreenMode(mode);
 ```
@@ -146,10 +143,10 @@ try window.setFullscreenMode(mode);
 try window.setTitle("New Title");
 
 // Get title
-const title = try window.getTitle();
+const title = window.getTitle();
 
 // Set icon (from surface)
-const icon_surface = try sdl3.surface.loadBmp("icon.bmp");
+const icon_surface = try sdl3.image.loadFile("icon.bmp");
 defer icon_surface.deinit();
 try window.setIcon(icon_surface);
 ```
@@ -194,11 +191,9 @@ if (props.wayland_xdg_surface) |surface| {
 
 ```zig
 // Get all displays
-var count: c_int = undefined;
-const displays = try sdl3.video.getDisplays(&count);
-defer sdl3.free(displays);
+const displays = try sdl3.video.getDisplays();
 
-for (displays[0..@intCast(count)]) |display| {
+for (displays) |display| {
     const name = try display.getName();
     std.debug.print("Display: {s}\n", .{name});
 }
@@ -207,7 +202,7 @@ for (displays[0..@intCast(count)]) |display| {
 const primary = try sdl3.video.Display.getPrimaryDisplay();
 
 // Get display containing window
-const window_display = try window.getDisplay();
+const window_display = try window.getDisplayForWindow();
 ```
 
 ### Display Information
@@ -330,7 +325,7 @@ const surface = try sdl3.surface.Surface.init(256, 256, .rgba8888);
 defer surface.deinit();
 
 // Load from BMP file
-const bmp = try sdl3.surface.loadBmp("image.bmp");
+const bmp = try sdl3.image.loadFile("image.bmp");
 defer bmp.deinit();
 
 // Create from pixel data
@@ -458,8 +453,8 @@ const renderer = try sdl3.render.Renderer.initWithProperties(.{
 });
 
 // Or set on existing renderer
-try renderer.setVSync(.enabled);   // VSync on
-try renderer.setVSync(.disabled);  // VSync off
+try renderer.setVSync(.{ .on_each_num_refresh = 1 });   // VSync on
+try renderer.setVSync(null);  // VSync off
 try renderer.setVSync(.adaptive);  // Adaptive
 ```
 
@@ -504,12 +499,12 @@ while (sdl3.events.poll()) |event| {
             // Window needs redraw
         },
         .window_moved => |w| {
-            const x = w.data1;
-            const y = w.data2;
+            const x = w.x;
+            const y = w.y;
         },
         .window_resized => |w| {
-            const width = w.data1;
-            const height = w.data2;
+            const width = w.width;
+            const height = w.height;
             handleResize(width, height);
         },
         .window_minimized => |w| pauseGame(),

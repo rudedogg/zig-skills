@@ -59,7 +59,7 @@ const props = try device.getProperties();
 if (props.name) |name| {
     std.debug.print("GPU: {s}\n", .{name});
 }
-if (props.device_driver_info) |info| {
+if (props.device_driver_name) |info| {
     std.debug.print("Driver: {s}\n", .{info});
 }
 
@@ -69,7 +69,7 @@ if (formats.spirv) std.debug.print("SPIR-V supported\n", .{});
 if (formats.msl) std.debug.print("Metal supported\n", .{});
 
 // Get backend driver name
-const driver = try device.getDriver();  // "vulkan", "d3d12", "metal"
+const driver = device.getDriver();  // "vulkan", "d3d12", "metal"
 ```
 
 ## Swapchain Setup
@@ -122,7 +122,7 @@ if (texture) |swapchain_texture| {
     }, null);
 
     // Draw commands...
-    render_pass.bindPipeline(pipeline);
+    render_pass.bindGraphicsPipeline(pipeline);
     render_pass.drawPrimitives(vertex_count, 1, 0, 0);
 
     render_pass.end();
@@ -344,14 +344,14 @@ const render_pass = cmd.beginRenderPass(
     },
 );
 
-render_pass.setViewport(.{ .x = 0, .y = 0, .w = width, .h = height, .min_depth = 0, .max_depth = 1 });
+render_pass.setViewport(.{ .region = .{ .x = 0, .y = 0, .w = @floatFromInt(width), .h = @floatFromInt(height) }, .min_depth = 0, .max_depth = 1 });
 render_pass.setScissor(.{ .x = 0, .y = 0, .w = width, .h = height });
 
-render_pass.bindPipeline(pipeline);
+render_pass.bindGraphicsPipeline(pipeline);
 render_pass.bindVertexBuffers(0, &[_]sdl3.gpu.BufferBinding{
     .{ .buffer = vertex_buffer, .offset = 0 },
 });
-render_pass.bindIndexBuffer(.{ .buffer = index_buffer, .offset = 0 }, .@"16bit");
+render_pass.bindIndexBuffer(.{ .buffer = index_buffer, .offset = 0 }, .indices_16bit);
 
 render_pass.drawIndexedPrimitives(index_count, 1, 0, 0, 0);
 

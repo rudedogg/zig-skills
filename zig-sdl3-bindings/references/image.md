@@ -255,7 +255,7 @@ const ImageCache = struct {
 ## Error Handling
 
 ```zig
-const surface = sdl3.image.load("missing.png") catch |err| {
+const surface = sdl3.image.loadFile("missing.png") catch |err| {
     std.debug.print("Failed to load image: {?s}\n", .{sdl3.errors.get()});
     return err;
 };

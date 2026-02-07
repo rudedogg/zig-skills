@@ -244,12 +244,8 @@ const flip: sdl3.surface.FlipMode = .vertical;
 
 ```zig
 // For streaming textures
-const lock = try texture.lock(null);  // Lock entire texture
+const pixels, const pitch = try texture.lock(null);  // Lock entire texture
 defer texture.unlock();
-
-// Write pixels
-const pixels = lock.pixels;
-const pitch = lock.pitch;
 
 for (0..height) |y| {
     for (0..width) |x| {
@@ -277,7 +273,7 @@ const format = props.format;
 const access = props.access;
 
 // Modify texture
-try texture.setColorMod(.{ .r = 255, .g = 128, .b = 128 });  // Tint
+try texture.setColorMod(255, 128, 128);  // Tint
 try texture.setAlphaMod(128);                                 // Transparency
 try texture.setBlendMode(.blend);                             // Blending
 ```
@@ -350,7 +346,7 @@ try renderer.setViewport(.{ .x = 100, .y = 100, .w = 600, .h = 400 });
 try renderer.setViewport(null);
 
 // Get current viewport
-const viewport = renderer.getViewport();
+const viewport = try renderer.getViewport();
 ```
 
 ### Clip Rectangle
@@ -363,8 +359,8 @@ try renderer.setClipRect(.{ .x = 50, .y = 50, .w = 200, .h = 200 });
 try renderer.setClipRect(null);
 
 // Check if clipping enabled
-if (renderer.isClipEnabled()) {
-    const clip = renderer.getClipRect();
+if (renderer.getClipEnabled()) {
+    const clip = try renderer.getClipRect();
 }
 ```
 
@@ -377,13 +373,13 @@ Handle resolution-independent rendering:
 try renderer.setLogicalPresentation(
     1920,           // logical width
     1080,           // logical height
-    .letterbox,     // scale mode
+    .letter_box,     // scale mode
 );
 
 // Scale modes
 const mode: sdl3.render.LogicalPresentation = .disabled;   // No scaling
 const mode: sdl3.render.LogicalPresentation = .stretch;    // Stretch to fit
-const mode: sdl3.render.LogicalPresentation = .letterbox;  // Maintain aspect, black bars
+const mode: sdl3.render.LogicalPresentation = .letter_box;  // Maintain aspect, black bars
 const mode: sdl3.render.LogicalPresentation = .overscan;   // Fill and crop
 
 // Get logical size
@@ -420,10 +416,10 @@ try renderer.renderDebugTextFormat(.{ .x = 10, .y = 50 }, "Lives: {d}", .{lives}
 
 ```zig
 // Convert window coordinates to render coordinates
-const render_x, const render_y = try renderer.coordinatesFromWindow(
-    window_x,
-    window_y,
-);
+const render_point = try renderer.renderCoordinatesFromWindowCoordinates(.{
+    .x = window_x,
+    .y = window_y,
+});
 
 // Convert event coordinates
 var event = sdl3.events.poll().?;
@@ -434,8 +430,8 @@ try renderer.convertEventToRenderCoordinates(&event);
 
 ```zig
 // Set VSync
-try renderer.setVSync(.enabled);
-try renderer.setVSync(.disabled);
+try renderer.setVSync(.{ .on_each_num_refresh = 1 });
+try renderer.setVSync(null);
 try renderer.setVSync(.adaptive);  // Sync when ahead, no wait when behind
 
 // Get current setting

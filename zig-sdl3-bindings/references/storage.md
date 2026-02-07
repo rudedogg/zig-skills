@@ -9,7 +9,7 @@ const sdl3 = @import("sdl3");
 
 // Open title storage (game data bundled with app)
 const storage = try sdl3.storage.Storage.initTitle(null, null);
-defer storage.deinit();
+defer storage.deinit() catch {};
 
 // Wait until storage is ready
 while (!storage.isReady()) {
@@ -26,8 +26,8 @@ try storage.readFile("data/config.json", &buffer);
 
 ```zig
 // Open user storage (writable)
-const storage = try sdl3.storage.Storage.initUser("MyCompany", "MyGame");
-defer storage.deinit();
+const storage = try sdl3.storage.Storage.initUser("MyCompany", "MyGame", null);
+defer storage.deinit() catch {};
 
 // Wait for ready
 while (!storage.isReady()) {
@@ -44,7 +44,7 @@ try storage.readFile("saves/slot1.json", &buffer);
 
 // Get file info
 const info = try storage.getPathInfo("saves/slot1.json");
-const file_size = info.size;
+const file_size = info.file_size;
 
 // Enumerate files
 try storage.enumerateDirectory("saves", void, enumCallback, null);
@@ -57,7 +57,7 @@ Open arbitrary filesystem path as storage:
 ```zig
 // Open directory as storage
 const storage = try sdl3.storage.Storage.initFile("/path/to/data");
-defer storage.deinit();
+defer storage.deinit() catch {};
 
 // Use like any other storage
 try storage.writeFile("test.txt", "Hello");
@@ -70,9 +70,9 @@ try storage.writeFile("test.txt", "Hello");
 ```zig
 const info = try storage.getPathInfo("path/to/file");
 
-switch (info.type) {
+switch (info.path_type) {
     .file => {
-        const size = info.size;
+        const size = info.file_size;
         const modify_time = info.modify_time;
     },
     .directory => {},
@@ -91,7 +91,7 @@ fn enumCallback(
     _ = user_data;
     _ = storage;
     std.debug.print("Found: {s}\n", .{path});
-    return .continue_;
+    return .run;
 }
 
 try storage.enumerateDirectory("saves", void, enumCallback, null);
@@ -127,8 +127,8 @@ if (space < required_space) {
 On platforms with cloud save support (Steam, consoles, etc.), user storage automatically syncs:
 
 ```zig
-const storage = try sdl3.storage.Storage.openUser("MyCompany", "MyGame");
-defer storage.deinit();
+const storage = try sdl3.storage.Storage.initUser("MyCompany", "MyGame", null);
+defer storage.deinit() catch {};
 
 // Wait for cloud sync to complete
 while (!storage.isReady()) {
@@ -150,8 +150,8 @@ defer props.deinit();
 try props.set(sdl3.storage.props.organization, .{ .string = "MyCompany" });
 try props.set(sdl3.storage.props.app, .{ .string = "MyGame" });
 
-const storage = try sdl3.storage.Storage.openUserWithProperties(props);
-defer storage.deinit();
+const storage = try sdl3.storage.Storage.initUser("MyCompany", "MyGame", props);
+defer storage.deinit() catch {};
 ```
 
 ## Save System Example
@@ -162,7 +162,7 @@ const SaveManager = struct {
     allocator: std.mem.Allocator,
 
     fn init(allocator: std.mem.Allocator, org: []const u8, app: []const u8) !SaveManager {
-        const storage = try sdl3.storage.Storage.openUser(org, app);
+        const storage = try sdl3.storage.Storage.initUser(org, app, null);
 
         // Wait for ready
         while (!storage.isReady()) {
@@ -176,7 +176,7 @@ const SaveManager = struct {
     }
 
     fn deinit(self: *SaveManager) void {
-        self.storage.deinit();
+        self.storage.deinit() catch {};
     }
 
     fn saveSlot(self: *SaveManager, slot: u32, data: []const u8) !void {
@@ -190,9 +190,9 @@ const SaveManager = struct {
         const path = try std.fmt.bufPrint(&path_buf, "saves/slot{}.sav", .{slot});
 
         const info = self.storage.getPathInfo(path) catch return null;
-        if (info.type != .file) return null;
+        if (info.path_type != .file) return null;
 
-        const buffer = try self.allocator.alloc(u8, @intCast(info.size));
+        const buffer = try self.allocator.alloc(u8, @intCast(info.file_size));
         errdefer self.allocator.free(buffer);
 
         _ = try self.storage.readFile(path, buffer);
@@ -215,7 +215,7 @@ const SaveManager = struct {
                         ctx.list.append(ctx.alloc, num) catch {};
                     } else |_| {}
                 }
-                return .continue_;
+                return .run;
             }
         };
 

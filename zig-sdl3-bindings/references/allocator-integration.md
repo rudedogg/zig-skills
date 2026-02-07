@@ -13,7 +13,7 @@ const sdl3 = @import("sdl3");
 pub fn main() !void {
     // Create your allocator
     var gpa: std.heap.DebugAllocator(.{}) = .init;
-    defer _ = gpa.deinit();
+    defer if (gpa.detectLeaks()) @panic("Memory leaks detected!");
 
     // Set SDL to use it (must be done before any SDL calls)
     _ = try sdl3.setMemoryFunctionsByAllocator(gpa.allocator());
@@ -36,7 +36,7 @@ const sdl3 = @import("sdl3");
 pub fn main() !void {
     // Use debug allocator to catch memory issues
     var debug_allocator = std.heap.DebugAllocator(.{}).init;
-    defer debug_allocator.deinit();
+    defer if (debug_allocator.detectLeaks()) @panic("Memory leaks detected!");
 
     _ = try sdl3.setMemoryFunctionsByAllocator(debug_allocator.allocator());
 

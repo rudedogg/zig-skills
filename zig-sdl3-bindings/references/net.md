@@ -17,16 +17,11 @@ const sdl3_dep = b.dependency("sdl3", .{
 ```zig
 const sdl3 = @import("sdl3");
 
-// Resolve hostname to address
-const addresses = try sdl3.net.getAddressesForHost("example.com", 80);
-defer addresses.deinit();
+// Create address from hostname or IP (host only, no port)
+const addr = try sdl3.net.Address.init("example.com");
 
-for (addresses.items) |addr| {
-    std.debug.print("Address: {}\n", .{addr});
-}
-
-// Create address directly (host only, no port)
-const addr = try sdl3.net.Address.init("192.168.1.1");
+// Create address from IP
+const addr2 = try sdl3.net.Address.init("192.168.1.1");
 ```
 
 ## TCP Client
@@ -250,8 +245,8 @@ const GameClient = struct {
     connected: bool = false,
 
     fn connect(self: *GameClient, host: []const u8, port: u16) !void {
-        const addr = try sdl3.net.Address.init(host, port);
-        self.socket = try sdl3.net.StreamSocket.init(addr);
+        const addr = try sdl3.net.Address.init(host);
+        self.socket = try sdl3.net.StreamSocket.initClient(addr, port);
         self.connected = true;
 
         // Send join packet

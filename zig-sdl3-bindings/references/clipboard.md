@@ -11,10 +11,9 @@ const sdl3 = @import("sdl3");
 try sdl3.clipboard.setText("Hello, World!");
 
 // Paste text from clipboard
-if (sdl3.clipboard.getText()) |text| {
-    defer sdl3.free(text);
-    std.debug.print("Clipboard: {s}\n", .{text});
-}
+const text = try sdl3.clipboard.getText();
+defer sdl3.free(text);
+std.debug.print("Clipboard: {s}\n", .{text});
 
 // Check if clipboard has text
 if (sdl3.clipboard.hasText()) {
@@ -28,10 +27,9 @@ if (sdl3.clipboard.hasText()) {
 // Primary selection is highlighted text (Unix)
 try sdl3.clipboard.setPrimarySelectionText("Selected text");
 
-if (sdl3.clipboard.getPrimarySelectionText()) |text| {
-    defer sdl3.free(text);
-    // Use selected text
-}
+const text = try sdl3.clipboard.getPrimarySelectionText();
+defer sdl3.free(text);
+// Use selected text
 
 if (sdl3.clipboard.hasPrimarySelectionText()) {
     // Primary selection available
@@ -122,7 +120,7 @@ try sdl3.clipboard.setData(
 ### Clear Clipboard
 
 ```zig
-try sdl3.clipboard.clear();
+try sdl3.clipboard.clearData();
 ```
 
 ## Clipboard Events
@@ -169,14 +167,13 @@ const TextEditor = struct {
     }
 
     fn paste(self: *TextEditor) !void {
-        if (sdl3.clipboard.getText()) |text| {
-            defer sdl3.free(text);
+        const text = try sdl3.clipboard.getText();
+        defer sdl3.free(text);
 
-            self.deleteSelection();
-            try self.text.insertSlice(self.allocator, self.selection_start, text);
-            self.selection_start += text.len;
-            self.selection_end = self.selection_start;
-        }
+        self.deleteSelection();
+        try self.text.insertSlice(self.allocator, self.selection_start, text);
+        self.selection_start += text.len;
+        self.selection_end = self.selection_start;
     }
 
     fn deleteSelection(self: *TextEditor) void {
@@ -223,20 +220,16 @@ fn copyImageToClipboard(surface: sdl3.surface.Surface) !void {
 fn pasteImageFromClipboard() !?sdl3.surface.Surface {
     // Try PNG first
     if (sdl3.clipboard.hasData("image/png")) {
-        var size: usize = undefined;
-        if (sdl3.clipboard.getData("image/png", &size)) |data| {
-            defer sdl3.free(data);
-            return try decodePngToSurface(data[0..size]);
-        }
+        const data = try sdl3.clipboard.getData("image/png");
+        defer sdl3.free(data.ptr);
+        return try decodePngToSurface(data);
     }
 
     // Try BMP
     if (sdl3.clipboard.hasData("image/bmp")) {
-        var size: usize = undefined;
-        if (sdl3.clipboard.getData("image/bmp", &size)) |data| {
-            defer sdl3.free(data);
-            return try decodeBmpToSurface(data[0..size]);
-        }
+        const data = try sdl3.clipboard.getData("image/bmp");
+        defer sdl3.free(data.ptr);
+        return try decodeBmpToSurface(data);
     }
 
     return null;

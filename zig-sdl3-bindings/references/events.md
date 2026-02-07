@@ -97,8 +97,8 @@ switch (event) {
         if (k.key == .space) jump();
 
         // Modifiers
-        if (k.mod.shift) sprintMode();
-        if (k.mod.ctrl and k.key == .s) save();
+        if (k.mod.shiftDown()) sprintMode();
+        if (k.mod.controlDown() and k.key == .s) save();
 
         // Ignore key repeat
         if (!k.repeat) {
@@ -137,12 +137,12 @@ switch (event) {
 ```zig
 const k: sdl3.events.KeyboardEvent = event.key_down;
 
-if (k.mod.shift) {}    // Shift held
-if (k.mod.ctrl) {}     // Ctrl held
-if (k.mod.alt) {}      // Alt held
-if (k.mod.gui) {}      // Windows/Command held
-if (k.mod.caps) {}     // Caps Lock active
-if (k.mod.num) {}      // Num Lock active
+if (k.mod.shiftDown()) {}    // Shift held
+if (k.mod.controlDown()) {}  // Ctrl held
+if (k.mod.altDown()) {}      // Alt held
+if (k.mod.guiDown()) {}      // Windows/Command held
+if (k.mod.caps_lock) {}      // Caps Lock active
+if (k.mod.num_lock) {}       // Num Lock active
 ```
 
 ### Mouse Events
@@ -155,11 +155,11 @@ switch (event) {
         const y = m.y;
 
         // Relative movement (good for FPS cameras)
-        const dx = m.xrel;
-        const dy = m.yrel;
+        const dx = m.x_rel;
+        const dy = m.y_rel;
 
         // Which mouse (for multi-mouse)
-        const mouse_id = m.which;
+        const mouse_id = m.id;
     },
 
     .mouse_button_down => |m| {
@@ -183,7 +183,7 @@ switch (event) {
 
     .mouse_wheel => |w| {
         // Scroll amount
-        scroll(w.x, w.y);
+        scroll(w.scroll_x, w.scroll_y);
 
         // Direction (useful for natural scrolling detection)
         const direction = w.direction;
@@ -212,18 +212,18 @@ switch (event) {
         forceRedraw();
     },
     .window_moved => |w| {
-        const x = w.data1;
-        const y = w.data2;
+        const x = w.x;
+        const y = w.y;
     },
     .window_resized => |w| {
-        const width = w.data1;
-        const height = w.data2;
+        const width = w.width;
+        const height = w.height;
         handleResize(width, height);
     },
     .window_pixel_size_changed => |w| {
         // Pixel size changed (HiDPI)
-        const pixel_width = w.data1;
-        const pixel_height = w.data2;
+        const pixel_width = w.width;
+        const pixel_height = w.height;
     },
     .window_minimized => |w| {
         pauseGame();
@@ -254,7 +254,7 @@ switch (event) {
     },
     .window_display_changed => |w| {
         // Window moved to different monitor
-        const display_id = w.data1;
+        const display_id = w.display;
     },
     .window_display_scale_changed => |w| {
         // DPI changed
@@ -272,13 +272,13 @@ switch (event) {
 switch (event) {
     .gamepad_added => |g| {
         // Controller connected
-        const gamepad = try sdl3.gamepad.Gamepad.open(g.which);
+        const gamepad = try sdl3.gamepad.Gamepad.open(g.id);
         controllers.append(allocator, gamepad);
     },
 
     .gamepad_removed => |g| {
         // Controller disconnected
-        removeController(g.which);
+        removeController(g.id);
     },
 
     .gamepad_button_down => |g| {
@@ -364,13 +364,13 @@ switch (event) {
 
     .drop_file => |d| {
         // File dropped
-        const path = d.data;
+        const path = d.file_name;
         openFile(path);
     },
 
     .drop_text => |d| {
         // Text dropped
-        const text = d.data;
+        const text = d.text;
         insertText(text);
     },
 
