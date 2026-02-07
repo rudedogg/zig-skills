@@ -25,18 +25,12 @@ See https://austinrude.com/blog/making-a-zig-agent-skill/ for details.
 
 ## Usage
 
-Install the `zig-0.15` directory into `~/.claude/skills/` per [Claude Code skill documentation](https://docs.anthropic.com/en/docs/claude-code/skills).
+Install the `zig` directory into `~/.claude/skills/` per [Claude Code skill documentation](https://docs.anthropic.com/en/docs/claude-code/skills).
 
 Example prompt:
 ```
 Using the zig skill please review @src/ and help me improve the codebase.
 ```
-
-## Known Limitations
-
-- Build system section may have rough edges
-- Some explanatory text may have slight imprecision (code examples are generally correct)
-- Patterns reference went through multiple iterations
 
 ## Feedback
 
