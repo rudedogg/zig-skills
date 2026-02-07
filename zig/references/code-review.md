@@ -17,7 +17,7 @@ Systematic code review checklist organized by detection confidence level. Work t
 | `writer(&buf)` without `.flush()` | Missing flush | Data loss | Add `try w.flush()` |
 | `.{}` on container type | Wrong init | Compile error | Use `.empty` or `.init` |
 | `root_source_file` in build.zig | Old build API | Compile error | Use `root_module = b.createModule(...)` |
-| `"{}"` with custom format method | Old format spec | Compile error | Use `"{f}"` |
+| `"{}"` with custom format method | Old format spec | Compile error | Use `"{f}"` (see [1.4](#14-api-signature-changes)) |
 | `getOrPut` then `ensure*` | Exception safety | Orphan entries | Reserve first, mutate with `*AssumeCapacity` |
 
 ### Guaranteed Bug Patterns
@@ -37,20 +37,22 @@ Systematic code review checklist organized by detection confidence level. Work t
 | Detect | When to Flag | Section |
 |--------|--------------|---------|
 | `anyerror` return type | Library public API | [2.7](#27-error-handling-selection) |
-| `defer` inside loop body | Memory accumulation risk | [2.8](#28-defer-scoping-issues) |
+| Loop allocations with non-freeing allocator | Arena without reset | [2.8](#28-loop-resource-management) |
 | `[*]T` pointer type | Pure Zig code (not FFI) | [2.10](#210-pointer-type-selection) |
 | Regular `for` on `@typeInfo` fields | Need comptime iteration | [2.11](#211-comptime-propagation) |
 | `ArenaAllocator` without `.reset()` | Long-running service | [2.9](#29-allocator-misuse-patterns) |
+| Multi-step alloc without errdefer | Partial construction | [2.12](#212-missing-errdefer-for-partial-construction) |
+| Alloc without `defer free` + error returns | Resource leak | [2.13](#213-missing-defer-for-allocation-cleanup) |
 
 ### Style Quick Checks
 
 | Detect | Suggestion | Section |
 |--------|------------|---------|
-| Imports not grouped | std → third-party → local | [3.9](#39-import-organization) |
-| Global allocator variable | Accept as parameter | [3.10](#310-allocator-design) |
-| `allocPrint` for bounded strings | Use `bufPrint` with stack buffer | [3.11](#311-stack-vs-heap-allocation) |
-| Runtime constant lookup | Comptime lookup table | [3.12](#312-comptime-optimization) |
-| `expectEqual` with strings/slices | Use `expectEqualStrings`/`expectEqualSlices` | [3.15](#315-testing-best-practices) |
+| Imports not grouped | std → third-party → local | [3.8](#38-import-organization) |
+| Global allocator variable | Accept as parameter | [3.9](#39-allocator-design) |
+| `allocPrint` for bounded strings | Use `bufPrint` with stack buffer | [3.10](#310-stack-vs-heap-allocation) |
+| Runtime constant lookup | Comptime lookup table | [3.11](#311-comptime-optimization) |
+| `expectEqual` with strings/slices | Use `expectEqualStrings`/`expectEqualSlices` | [3.14](#314-testing-best-practices) |
 
 ---
 
@@ -59,7 +61,7 @@ Systematic code review checklist organized by detection confidence level. Work t
 1. **Run `zig fmt`** — catches whitespace, trailing commas, basic style
 2. **Scan for ALWAYS FLAG patterns** — removed features, old APIs, guaranteed bugs
 3. **Check safety** — defer/errdefer usage, reserve-first pattern, memory poisoning
-4. **Check context-dependent issues** — allocator naming, error handling, defer scoping
+4. **Check context-dependent issues** — allocator naming, error handling, loop resources
 5. **Review style** — naming conventions, struct init, imports, documentation
 6. **Verify build.zig** — `standardTargetOptions`, `standardOptimizeOption`, `root_module`
 
@@ -134,6 +136,8 @@ try stack.appendSliceBounded(initial);
 | `.One`, `.Slice`, `.Many` | `.one`, `.slice`, `.many` | Compile error |
 | `sentinel = &val` | `sentinel_ptr = &val` | Compile error |
 | Inline asm clobbers `"rcx"` | `.{ .rcx = true }` | Compile error |
+| `callconv(.C)` | `callconv(.c)` | Compile error |
+| `callconv(.Stdcall)` | `callconv(.x86_stdcall)` | Compile error |
 
 **Wrong:**
 ```zig
@@ -181,6 +185,16 @@ asm volatile ("syscall"
 );
 ```
 
+**Wrong:**
+```zig
+export fn foo() callconv(.C) void {}
+```
+
+**Right:**
+```zig
+export fn foo() callconv(.c) void {}
+```
+
 ### 1.3 Removed/Renamed APIs
 
 | Detect | New | Risk |
@@ -192,9 +206,13 @@ asm volatile ("syscall"
 | `BufferedWriter` | Buffer provided to `.writer(&buf)` | Compile error |
 | `CountingWriter` | `std.Io.Writer.Discarding` | Compile error |
 | `GenericWriter/Reader` | `std.Io.Writer/Reader` | Deprecated |
-| `std.ArrayList` | `std.array_list.Managed` | Eventually removed |
+| `std.ArrayList` (managed) | `std.array_list.Managed` | Eventually removed |
+| `std.ArrayListUnmanaged` | `std.ArrayList` | Unmanaged is now the default |
 | `std.fifo.LinearFifo` | `std.Io.Reader`/`Writer` patterns | Removed |
 | `std.RingBuffer` | `std.Io.Reader`/`Writer` patterns | Removed |
+| `std.ChildProcess` | `std.process.Child` | Compile error |
+| `*std.build.Builder` | `*std.Build` | Compile error |
+| `.{ .path = "..." }` | `b.path("...")` | Compile error |
 
 **Wrong:**
 ```zig
@@ -229,6 +247,8 @@ exe.root_module.addImport("helper", helper_mod);
 ```
 
 ### 1.4 API Signature Changes
+
+*Note: For `"{}"` → `"{f}"`, this is a migration check. For new code forgetting `.flush()`, see also [2.2](#22-missing-flush-after-io-write).*
 
 | Detect | New | Risk |
 |--------|-----|------|
@@ -284,6 +304,7 @@ std.debug.print("{f}", .{myFormattableType});
 | `var list: ArrayList(T) = .{}` | `.empty` | Deprecated |
 | `var gpa: DebugAllocator(.{}) = .{}` | `.init` | Deprecated |
 | `var map: HashMapUnmanaged(...) = .{}` | `.empty` | Deprecated |
+| `list.append(42)` (old managed API) | `try list.append(allocator, 42)` | Compile error |
 
 **Wrong:**
 ```zig
@@ -297,6 +318,22 @@ var list: std.ArrayList(u32) = .empty;
 var map: std.AutoHashMapUnmanaged(u32, u32) = .empty;
 var gpa: std.heap.DebugAllocator(.{}) = .init;
 var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+```
+
+**ArrayList is now unmanaged by default** — allocator is passed per method call, not stored:
+
+**Wrong (old managed API):**
+```zig
+var list = std.ArrayList(u32).init(allocator);
+list.append(42);
+```
+
+**Right (unmanaged, allocator per call):**
+```zig
+var list: std.ArrayList(u32) = .empty;
+try list.append(allocator, 42);
+try list.appendSlice(allocator, &.{ 1, 2, 3 });
+defer list.deinit(allocator);
 ```
 
 ### 1.6 Guaranteed Runtime Bugs
@@ -668,6 +705,8 @@ state.bytes.appendSliceAssumeCapacity(data);
 
 ### 2.2 Missing flush() After I/O Write
 
+*Note: For migrating old `stdout.print()` calls, see also [1.4](#14-api-signature-changes). This section covers new code that forgets `.flush()`.*
+
 | Detect | `writer(&buf)` or `.writer(&` without subsequent `.flush()` |
 |--------|-------------------------------------------------------------|
 | Risk | Data loss (buffered data not written) |
@@ -823,38 +862,65 @@ pub const ParseError = error{ UnexpectedToken, InvalidSyntax, OutOfMemory };
 pub fn parse(input: []const u8) ParseError!Ast { ... }
 ```
 
-### 2.8 Defer Scoping Issues
+### 2.8 Loop Resource Management
 
-| Detect | `defer` inside loop body |
-|--------|--------------------------|
-| Risk | Memory accumulates until function exit |
+| Detect | Allocations inside loop body |
+|--------|------------------------------|
+| Risk | Memory accumulation or premature free |
 
 **Preconditions:**
-- [ ] `defer` appears inside `for`/`while` loop
-- [ ] Deferred resource is allocated per iteration
+- [ ] Loop body allocates memory
+- [ ] Allocator does not actually free (e.g., `ArenaAllocator`)
+- [ ] OR: Results accumulate across iterations where `defer` would free too early
 
-**If met:** Free immediately or extract to separate function.
+**If met:** Use arena with per-iteration reset, or manage lifetime explicitly.
+
+Zig's `defer` is **block-scoped** — it runs at the end of each loop iteration, not at function exit. This means `defer free` inside a loop works correctly for per-iteration cleanup. The real risks are:
+
+**Risk 1: Non-freeing allocator makes `defer free` a no-op:**
 
 **Wrong:**
 ```zig
+// ArenaAllocator.free() is a no-op — memory accumulates
 for (items) |item| {
-    const data = try allocator.alloc(u8, item.size);
-    defer allocator.free(data);  // Accumulates!
+    const data = try arena.alloc(u8, item.size);
+    defer arena.free(data);  // Does nothing!
     try process(data);
 }
 ```
 
 **Right:**
 ```zig
-for (items) |item| {
-    const data = try allocator.alloc(u8, item.size);
-    try process(data);
-    allocator.free(data);  // Immediate
-}
+// Use a scratch arena with per-iteration reset
+var scratch = std.heap.ArenaAllocator.init(backing_allocator);
+defer scratch.deinit();
 
-// OR extract to function
 for (items) |item| {
-    try processOne(item, allocator);
+    defer _ = scratch.reset(.retain_capacity);
+    const data = try scratch.allocator().alloc(u8, item.size);
+    try process(data);
+}
+```
+
+**Risk 2: Accumulating results across iterations where `defer` would free too early:**
+
+**Wrong:**
+```zig
+var results: std.ArrayList([]u8) = .empty;
+for (items) |item| {
+    const data = try allocator.dupe(u8, item.name);
+    defer allocator.free(data);  // Frees before we're done with it!
+    try results.append(allocator, data);
+}
+```
+
+**Right:**
+```zig
+var results: std.ArrayList([]u8) = .empty;
+for (items) |item| {
+    const data = try allocator.dupe(u8, item.name);
+    errdefer allocator.free(data);  // Only free on error
+    try results.append(allocator, data);
 }
 ```
 
@@ -963,6 +1029,78 @@ fn printFields(comptime T: type) void {
 }
 ```
 
+### 2.12 Missing errdefer for Partial Construction
+
+| Detect | Multi-step allocation without errdefer cleanup |
+|--------|------------------------------------------------|
+| Risk | Resource leak on failure |
+
+**Preconditions:**
+- [ ] Function performs multiple fallible allocations
+- [ ] Earlier allocations not cleaned up if later ones fail
+
+**If met:** Add `errdefer` after each allocation that must be cleaned up on failure.
+
+**Wrong:**
+```zig
+pub fn init(gpa: Allocator) !Self {
+    const data = try gpa.alloc(u8, 100);
+    const more = try gpa.alloc(u8, 200);  // data leaks if this fails
+    return .{ .data = data, .more = more };
+}
+```
+
+**Right:**
+```zig
+pub fn init(gpa: Allocator) !Self {
+    const data = try gpa.alloc(u8, 100);
+    errdefer gpa.free(data);
+    const more = try gpa.alloc(u8, 200);
+    return .{ .data = data, .more = more };
+}
+```
+
+**Verify:** Search for functions with multiple `try allocator.alloc`/`create` calls. Check that each allocation (except the last) has a corresponding `errdefer`.
+
+### 2.13 Missing defer for Allocation Cleanup
+
+| Detect | Allocation without corresponding `defer free` in function with error/early-return paths |
+|--------|----------------------------------------------------------------------------------------|
+| Risk | Memory leak on non-error paths |
+
+**Preconditions:**
+- [ ] Function allocates memory for internal use (not returned to caller)
+- [ ] Function has `try`, `return`, or other early-exit paths after allocation
+- [ ] No `defer` to free the allocation
+
+**If met:** Add `defer allocator.free(...)` immediately after allocation.
+
+This is distinct from `errdefer` ([2.12](#212-missing-errdefer-for-partial-construction)) — `errdefer` only fires on error. This covers unconditional cleanup of internally-used allocations.
+
+**Wrong:**
+```zig
+fn process(gpa: Allocator, input: []const u8) !Result {
+    const temp = try gpa.alloc(u8, input.len);
+    const parsed = try parse(input);  // temp leaks if this fails
+    // ... use temp ...
+    gpa.free(temp);
+    return parsed;
+}
+```
+
+**Right:**
+```zig
+fn process(gpa: Allocator, input: []const u8) !Result {
+    const temp = try gpa.alloc(u8, input.len);
+    defer gpa.free(temp);
+    const parsed = try parse(input);  // temp freed by defer
+    // ... use temp ...
+    return parsed;
+}
+```
+
+**Verify:** Search for `alloc(` not followed by `defer.*free` in functions with `try` or early returns.
+
 ---
 
 ## 3. SUGGEST (Advisory)
@@ -1023,32 +1161,7 @@ var mutex = Mutex{};
 var mutex: Mutex = .{};
 ```
 
-### 3.4 Missing errdefer for Partial Construction
-
-| Detect | Multi-step allocation without errdefer cleanup |
-|--------|------------------------------------------------|
-| Risk | Resource leak on failure |
-
-**Wrong:**
-```zig
-pub fn init(gpa: Allocator) !Self {
-    const data = try gpa.alloc(u8, 100);
-    const more = try gpa.alloc(u8, 200);  // data leaks if this fails
-    return .{ .data = data, .more = more };
-}
-```
-
-**Right:**
-```zig
-pub fn init(gpa: Allocator) !Self {
-    const data = try gpa.alloc(u8, 100);
-    errdefer gpa.free(data);
-    const more = try gpa.alloc(u8, 200);
-    return .{ .data = data, .more = more };
-}
-```
-
-### 3.5 Redundant Naming
+### 3.4 Redundant Naming
 
 | Detect | Names like `JsonValue`, `DataManager`, `miscUtils` |
 |--------|---------------------------------------------------|
@@ -1068,7 +1181,7 @@ const json = struct {
 };
 ```
 
-### 3.6 Large Struct Passed by Value
+### 3.5 Large Struct Passed by Value
 
 | Detect | Struct >16 bytes passed as `self: T` (read-only) |
 |--------|--------------------------------------------------|
@@ -1090,23 +1203,36 @@ Also applies to payload captures:
 // Right: if (m.target) |*target| { ... }
 ```
 
-### 3.7 Format Method Missing {f} Usage
+### 3.6 errdefer Error Capture for Debugging
 
-| Detect | Custom `format` method but docs/examples use `"{}"` |
-|--------|-----------------------------------------------------|
-| Risk | Compile error in 0.15.x |
+| Detect | Complex init/setup function without `errdefer` diagnostics |
+|--------|-----------------------------------------------------------|
+| Risk | Hard to diagnose failures |
 
-**Wrong:**
+In complex initialization functions, use `errdefer |err|` to capture and log the error for debugging context:
+
+**Basic:**
 ```zig
-std.debug.print("{}", .{version});
+pub fn init(gpa: Allocator, path: []const u8) !Self {
+    const file = std.fs.cwd().openFile(path, .{}) catch |err| return err;
+    // No context if later steps fail
+    ...
+}
 ```
 
-**Right:**
+**Better:**
 ```zig
-std.debug.print("{f}", .{version});
+pub fn init(gpa: Allocator, path: []const u8) !Self {
+    errdefer |err| {
+        std.log.err("init failed for '{s}': {}", .{ path, err });
+    }
+    const file = try std.fs.cwd().openFile(path, .{});
+    errdefer file.close();
+    ...
+}
 ```
 
-### 3.8 Style Guide Violations (not caught by zig fmt)
+### 3.7 Style Guide Violations (not caught by zig fmt)
 
 | Element | Convention | Example |
 |---------|-----------|---------|
@@ -1122,7 +1248,7 @@ std.debug.print("{f}", .{version});
 - Type file: `TitleCase.zig` (e.g., `ArrayList.zig`)
 - Namespace file: `snake_case.zig` (e.g., `mem.zig`)
 
-### 3.9 Import Organization
+### 3.8 Import Organization
 
 | Detect | Imports not grouped or inconsistently ordered |
 |--------|-----------------------------------------------|
@@ -1138,7 +1264,7 @@ const json = @import("json");  // Third-party
 const MyModule = @import("my_module.zig");  // Local
 ```
 
-### 3.10 Allocator Design
+### 3.9 Allocator Design
 
 | Detect | Global allocator variable |
 |--------|--------------------------|
@@ -1159,7 +1285,7 @@ pub fn process(allocator: Allocator) ![]u8 {
 }
 ```
 
-### 3.11 Stack vs Heap Allocation
+### 3.10 Stack vs Heap Allocation
 
 | Detect | Heap allocation for comptime-known bounded size |
 |--------|------------------------------------------------|
@@ -1172,15 +1298,18 @@ fn formatVersion(allocator: Allocator, major: u32, minor: u32) ![]u8 {
 }
 ```
 
-**Right:**
+**Right (caller provides buffer):**
 ```zig
-fn formatVersion(major: u32, minor: u32) []const u8 {
-    var buf: [32]u8 = undefined;
-    return std.fmt.bufPrint(&buf, "{d}.{d}", .{ major, minor }) catch unreachable;
+fn formatVersion(buf: []u8, major: u32, minor: u32) []u8 {
+    return std.fmt.bufPrint(buf, "{d}.{d}", .{ major, minor }) catch unreachable;
 }
+
+// Call site — buffer outlives the returned slice
+var buf: [32]u8 = undefined;
+const version = formatVersion(&buf, 1, 2);
 ```
 
-### 3.12 Comptime Optimization
+### 3.11 Comptime Optimization
 
 | Detect | Runtime loop for constant lookup |
 |--------|----------------------------------|
@@ -1208,7 +1337,7 @@ fn isVowel(c: u8) bool {
 }
 ```
 
-### 3.13 SIMD Opportunities
+### 3.12 SIMD Opportunities
 
 | Detect | Scalar loop on arrays where SIMD helps |
 |--------|----------------------------------------|
@@ -1241,7 +1370,7 @@ fn addArrays(a: []const f32, b: []const f32, result: []f32) void {
 
 Only suggest for hot loops with measurable impact.
 
-### 3.14 Struct Layout
+### 3.13 Struct Layout
 
 | Detect | `packed` for non-binary data, or poor extern field ordering |
 |--------|-------------------------------------------------------------|
@@ -1254,7 +1383,7 @@ Only suggest for hot loops with measurable impact.
 
 **Extern field order:** Order by size descending to minimize padding.
 
-### 3.15 Testing Best Practices
+### 3.14 Testing Best Practices
 
 | Detect | Production allocator in tests, or wrong assertion type |
 |--------|--------------------------------------------------------|
@@ -1272,7 +1401,7 @@ Only suggest for hot loops with measurable impact.
 // Slices: use expectEqualSlices (not expectEqual)
 ```
 
-### 3.16 Documentation
+### 3.15 Documentation
 
 | Detect | Public API without doc comments |
 |--------|--------------------------------|
@@ -1280,7 +1409,7 @@ Only suggest for hot loops with measurable impact.
 
 Focus on: what it does, error conditions, ownership, usage example.
 
-### 3.17 Stateless Context Pattern
+### 3.16 Stateless Context Pattern
 
 | Detect | `self` parameter that's never used |
 |--------|-----------------------------------|
