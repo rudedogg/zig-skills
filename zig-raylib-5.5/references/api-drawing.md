@@ -92,8 +92,8 @@ rl.drawRectangleRec(.{ .x = 10, .y = 10, .width = 100, .height = 50 }, .red);
 rl.drawRectanglePro(rect, origin, rotation, .red);
 
 // Outline
-rl.drawRectangleLines(10, 10, 100, 50, .dark_red);
-rl.drawRectangleLinesEx(rect, 2.0, .dark_red);  // With thickness
+rl.drawRectangleLines(10, 10, 100, 50, .maroon);
+rl.drawRectangleLinesEx(rect, 2.0, .maroon);  // With thickness
 
 // Rounded corners
 rl.drawRectangleRounded(rect, 0.2, 8, .green);  // 0.2 roundness, 8 segments

@@ -118,7 +118,7 @@ image.blurGaussian(4);
 image.setFormat(.uncompressed_r8g8b8a8);
 image.toPOT(.black);  // Resize to power-of-two
 
-// Mipmaps
+// Mipmaps (note: method is spelled "mimaps" in raylib-zig, not "mipmaps")
 image.mimaps();
 ```
 
@@ -442,7 +442,7 @@ const texture = rl.loadTexture("sprite.png") catch blk: {
 };
 ```
 
-### Async Loading Pattern
+### Structured Resource Loading
 
 ```zig
 // For larger games, consider loading screens:

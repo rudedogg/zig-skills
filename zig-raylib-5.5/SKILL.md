@@ -8,6 +8,7 @@ description: Zig bindings for raylib 5.5 game development library. Use when writ
 Idiomatic Zig bindings for raylib 5.5, wrapping the C API with Zig patterns: error unions, optionals, slices, and defer-based resource management.
 
 **Version:** raylib 5.5+ (raylib-zig bindings)
+**Minimum Zig:** 0.15.1
 
 ## Critical: Build Configuration
 
@@ -15,8 +16,8 @@ Idiomatic Zig bindings for raylib 5.5, wrapping the C API with Zig patterns: err
 
 ```zig
 .dependencies = .{
-    .@"raylib-zig" = .{
-        .url = "git+https://github.com/Not-Nik/raylib-zig#main",
+    .raylib_zig = .{
+        .url = "git+https://github.com/raylib-zig/raylib-zig#main",
         .hash = "...",  // Get from build error on first run
     },
 },
@@ -32,7 +33,7 @@ pub fn build(b: *std.Build) void {
     const optimize = b.standardOptimizeOption(.{});
 
     // Get raylib-zig dependency
-    const raylib_dep = b.dependency("raylib-zig", .{
+    const raylib_dep = b.dependency("raylib_zig", .{
         .target = target,
         .optimize = optimize,
     });
@@ -48,7 +49,7 @@ pub fn build(b: *std.Build) void {
 
     // Add raylib module and link library
     exe.root_module.addImport("raylib", raylib_dep.module("raylib"));
-    exe.linkLibrary(raylib_dep.artifact("raylib"));
+    exe.root_module.linkLibrary(raylib_dep.artifact("raylib"));
 
     b.installArtifact(exe);
 
@@ -429,6 +430,9 @@ if (rl.checkCollisionBoxSphere(box, sphereCenter, sphereRadius)) {
 | `.violet` | Violet |
 | `.beige` | Beige |
 | `.brown` | Brown |
+| `.dark_brown` | Dark brown |
+| `.dark_green` | Dark green |
+| `.dark_purple` | Dark purple |
 | `.magenta` | Magenta |
 
 ## Quick Reference: Key Codes

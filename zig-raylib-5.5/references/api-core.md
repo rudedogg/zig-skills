@@ -368,7 +368,7 @@ rl.clearBackground(.ray_white);
 
 // Screen-space drawing (UI, not affected by camera)
 rl.drawText("Score: 100", 10, 10, 20, .black);
-rl.drawRectangle(0, 0, 200, 50, .fade(.black, 0.5));
+rl.drawRectangle(0, 0, 200, 50, rl.fade(.black, 0.5));
 ```
 
 ### Coordinate Conversion

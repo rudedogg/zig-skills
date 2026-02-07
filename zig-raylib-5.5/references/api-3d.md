@@ -94,8 +94,8 @@ rl.drawCube(.init(0, 0, 0), 2, 2, 2, .red);
 rl.drawCubeV(.init(0, 0, 0), .init(2, 2, 2), .red);
 
 // Wireframe
-rl.drawCubeWires(.init(0, 0, 0), 2, 2, 2, .dark_red);
-rl.drawCubeWiresV(.init(0, 0, 0), .init(2, 2, 2), .dark_red);
+rl.drawCubeWires(.init(0, 0, 0), 2, 2, 2, .maroon);
+rl.drawCubeWiresV(.init(0, 0, 0), .init(2, 2, 2), .maroon);
 ```
 
 ### Spheres
