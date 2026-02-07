@@ -258,9 +258,8 @@ switch (type) {
 }
 
 // Battery info (returns tuple { PowerState, ?u7 })
-const power = try gamepad.getPowerInfo();
-const state = power[0];    // power.PowerState enum
-if (power[1]) |pct| {      // ?u7 percent
+const state, const maybe_pct = try gamepad.getPowerInfo();
+if (maybe_pct) |pct| {
     std.debug.print("Battery: {}%\n", .{pct});
 }
 ```

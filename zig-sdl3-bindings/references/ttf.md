@@ -106,14 +106,10 @@ const advance = metrics.advance;
 
 ```zig
 // Get size of rendered text (returns tuple { c_int, c_int })
-const size = try font.getStringSize("Hello World!");
-const width = size[0];
-const height = size[1];
+const width, const height = try font.getStringSize("Hello World!");
 
 // Measure how much text fits in width (returns tuple { c_int, usize })
-const extent = try font.measureString("Long text...", max_width);
-const measured_width = extent[0];   // Actual pixel width
-const measured_length = extent[1];  // Bytes that fit
+const measured_width, const measured_length = try font.measureString("Long text...", max_width);
 ```
 
 ### Font Style
@@ -231,9 +227,9 @@ fn wrapText(font: sdl3.ttf.Font, text: []const u8, max_width: u32, allocator: st
             word;
         defer if (allocated) allocator.free(test_line);
 
-        const size = try font.getStringSize(test_line);
+        const text_width, _ = try font.getStringSize(test_line);
 
-        if (size[0] > max_width and current_line.items.len > 0) {
+        if (text_width > max_width and current_line.items.len > 0) {
             // Start new line
             try lines.append(allocator, try current_line.toOwnedSlice(allocator));
             current_line.clearRetainingCapacity();

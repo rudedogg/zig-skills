@@ -50,11 +50,10 @@ pub fn main() !void {
         }
 
         // Get camera frame (returns tuple { ?Surface, ?u64 })
-        const frame_result = camera.acquireFrame();
-        if (frame_result[0]) |frame| {
+        const maybe_frame, const timestamp = camera.acquireFrame();
+        _ = timestamp;
+        if (maybe_frame) |frame| {
             defer camera.releaseFrame(frame);
-            const timestamp = frame_result[1];  // Optional timestamp
-            _ = timestamp;
 
             // Convert frame to texture
             const texture = try renderer.createTextureFromSurface(frame);

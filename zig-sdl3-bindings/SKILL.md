@@ -454,8 +454,7 @@ if (sdl3.events.waitTimeout(1000)) |event| {
 const sdl3 = @import("sdl3");
 
 // Load WAV file
-var spec: sdl3.audio.Spec = undefined;
-const audio_buf = try sdl3.audio.loadWav("sound.wav", &spec);
+const spec, const audio_buf = try sdl3.audio.loadWav("sound.wav");
 defer sdl3.audio.freeWav(audio_buf);
 
 // Open audio device

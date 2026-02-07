@@ -59,7 +59,7 @@ For advanced configuration:
 
 ```zig
 // Use CreateProperties struct (returns window and property group)
-const result = try sdl3.video.Window.initWithProperties(.{
+const window, const props = try sdl3.video.Window.initWithProperties(.{
     .title = "Advanced Window",
     .width = 1280,
     .height = 720,
@@ -67,8 +67,6 @@ const result = try sdl3.video.Window.initWithProperties(.{
     .y = .{ .absolute = 100 },
     .resizable = true,
 });
-const window = result[0];
-const props = result[1];
 defer props.deinit();
 defer window.deinit();
 ```

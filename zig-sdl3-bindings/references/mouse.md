@@ -91,10 +91,7 @@ const sdl3 = @import("sdl3");
 
 fn update() void {
     // Get current mouse state (returns struct { ButtonFlags, f32, f32 })
-    const state = sdl3.mouse.getState();
-    const buttons = state[0];
-    const x = state[1];
-    const y = state[2];
+    const buttons, const x, const y = sdl3.mouse.getState();
 
     if (buttons.left) {
         // Left button held
@@ -104,9 +101,7 @@ fn update() void {
     }
 
     // Global mouse position (screen coordinates)
-    const global = sdl3.mouse.getGlobalState();
-    const global_x = global[1];
-    const global_y = global[2];
+    _, const global_x, const global_y = sdl3.mouse.getGlobalState();
 }
 ```
 
@@ -238,18 +233,14 @@ try sdl3.mouse.Cursor.set(default);
 
 ```zig
 // Get mouse position in focused window
-const state = sdl3.mouse.getState();
-const x = state[1];
-const y = state[2];
+_, const x, const y = sdl3.mouse.getState();
 ```
 
 ### Global Coordinates
 
 ```zig
 // Get mouse position on screen
-const global = sdl3.mouse.getGlobalState();
-const screen_x = global[1];
-const screen_y = global[2];
+_, const screen_x, const screen_y = sdl3.mouse.getGlobalState();
 ```
 
 ### Warp Mouse

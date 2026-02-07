@@ -15,9 +15,7 @@ pub fn main() !void {
     defer sdl3.quit(.{ .audio = true });
 
     // Load WAV file (returns struct { Spec, []u8 })
-    const result = try sdl3.audio.loadWav("sound.wav");
-    const spec = result[0];
-    const wav_data = result[1];
+    const spec, const wav_data = try sdl3.audio.loadWav("sound.wav");
     defer sdl3.free(wav_data.ptr);  // Free with sdl3.free()
 
     // Open default playback device with simplified API

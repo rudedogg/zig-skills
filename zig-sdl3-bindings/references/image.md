@@ -107,7 +107,7 @@ var frame_timer: usize = 0;
 
 fn updateAnimation(anim: sdl3.image.Animation, dt_ms: usize) void {
     if (anim.getFrame(frame_index)) |frame| {
-        const delay = frame[1];  // delay in ms
+        _, const delay = frame;  // delay in ms
         frame_timer += dt_ms;
         while (frame_timer >= delay) {
             frame_timer -= delay;
@@ -118,7 +118,7 @@ fn updateAnimation(anim: sdl3.image.Animation, dt_ms: usize) void {
 
 fn renderAnimation(anim: sdl3.image.Animation, renderer: sdl3.render.Renderer, x: f32, y: f32) !void {
     if (anim.getFrame(frame_index)) |frame| {
-        const frame_surface = frame[0];  // surface.Surface
+        const frame_surface, _ = frame;
         const texture = try renderer.createTextureFromSurface(frame_surface);
         defer texture.deinit();
 

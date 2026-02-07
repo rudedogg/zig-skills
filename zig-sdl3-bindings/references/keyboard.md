@@ -289,8 +289,7 @@ const key_name = sdl3.keycode.getName(.space);  // "Space"
 // Convert between scancode and keycode
 const keycode = sdl3.keyboard.getKeyFromScancode(.w, .{}, false);
 if (sdl3.keyboard.getScancodeFromKey(.a)) |result| {
-    const sc = result[0];   // ?Scancode
-    const mod = result[1];  // KeyModifier
+    const sc, const mod = result;  // ?Scancode, KeyModifier
 }
 ```
 
