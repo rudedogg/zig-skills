@@ -44,10 +44,12 @@ defer rl.unloadSound(sound);
 // From wave data
 const wave = try rl.loadWave("assets/explosion.wav");
 defer rl.unloadWave(wave);
+// NOTE: loadSoundFromWave does NOT return an error union (no try needed)
 const soundFromWave = rl.loadSoundFromWave(wave);
 defer rl.unloadSound(soundFromWave);
 
 // Sound alias (shares audio buffer, saves memory)
+// NOTE: loadSoundAlias does NOT return an error union (no try needed)
 const soundAlias = rl.loadSoundAlias(sound);
 defer rl.unloadSoundAlias(soundAlias);
 

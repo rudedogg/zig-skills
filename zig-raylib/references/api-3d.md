@@ -575,6 +575,10 @@ shader.locs[@intFromEnum(rl.ShaderLocationIndex.map_albedo)] =
     rl.drawTexture(texture, 0, 0, .white);
 }
 
+// Method syntax alternatives
+shader.activate();          // Same as rl.beginShaderMode(shader)
+defer shader.deactivate();  // Same as rl.endShaderMode()
+
 // For models (assign to material)
 model.materials[0].shader = shader;
 model.draw(.init(0, 0, 0), 1.0, .white);

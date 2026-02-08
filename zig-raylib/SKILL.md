@@ -51,6 +51,9 @@ pub fn build(b: *std.Build) void {
     exe.root_module.addImport("raylib", raylib_dep.module("raylib"));
     exe.root_module.linkLibrary(raylib_dep.artifact("raylib"));
 
+    // Optional: add raygui for GUI widgets
+    exe.root_module.addImport("raygui", raylib_dep.module("raygui"));
+
     b.installArtifact(exe);
 
     const run_cmd = b.addRunArtifact(exe);
@@ -118,6 +121,52 @@ defer rl.unloadModel(model);
 
 const shader = try rl.loadShader(null, "shaders/effect.fs");
 defer rl.unloadShader(shader);
+```
+
+## Critical: Common Mistakes (WRONG vs CORRECT)
+
+```zig
+// WRONG: Importing raymath as a separate module
+const raymath = @import("raymath");
+// CORRECT: Access raymath through the raylib module
+const rl = @import("raylib");
+// then use: rl.math.clamp(), rl.math.lerp(), rl.math.matrixMultiply(), etc.
+
+// WRONG: Importing rlgl as a separate module
+const rlgl = @import("rlgl");
+// CORRECT: Access rlgl through the raylib module
+const rlgl = rl.gl;  // or use rl.gl.* directly
+
+// WRONG: Calling play as a method on sound
+sound.play();
+// CORRECT: Use free function for sound playback
+rl.playSound(sound);
+
+// WRONG: Calling crossProduct as a method on Vector2
+const cross = v1.crossProduct(v2);
+// CORRECT: Vector2 crossProduct is a FREE FUNCTION only
+const cross = rl.math.vector2CrossProduct(v1, v2);
+// NOTE: Vector3 DOES have crossProduct as a method: v1.crossProduct(v2)
+
+// WRONG: Using try on functions that don't return error unions
+const s = try rl.loadSoundFromWave(wave);
+const a = try rl.loadSoundAlias(sound);
+const img = try rl.getClipboardImage();
+// CORRECT: These return their types directly (no error union)
+const s = rl.loadSoundFromWave(wave);
+const a = rl.loadSoundAlias(sound);
+const img = rl.getClipboardImage();
+
+// WRONG: Expecting raygui button() to return i32
+const result: i32 = rg.button(bounds, "Click");
+// CORRECT: raygui button() returns bool
+if (rg.button(bounds, "Click")) { ... }
+
+// WRONG: Passing const slice to raygui textBox
+rg.textBox(bounds, "text", 64, editMode);
+// CORRECT: textBox requires a mutable [:0]u8 slice
+var buf: [64:0]u8 = .{0} ** 64;
+_ = rg.textBox(bounds, &buf, 64, editMode);
 ```
 
 ## Critical: Resource Management with Defer
@@ -405,59 +454,13 @@ if (rl.checkCollisionBoxSphere(box, sphereCenter, sphereRadius)) {
 }
 ```
 
-## Quick Reference: Named Colors
+## Quick Reference
 
-| Color | Usage |
-|-------|-------|
-| `.white` | White (255, 255, 255) |
-| `.black` | Black (0, 0, 0) |
-| `.ray_white` | Off-white background (245, 245, 245) |
-| `.blank` | Transparent (0, 0, 0, 0) |
-| `.red` | Red |
-| `.green` | Green |
-| `.blue` | Blue |
-| `.yellow` | Yellow |
-| `.orange` | Orange |
-| `.pink` | Pink |
-| `.purple` | Purple |
-| `.gray` | Gray |
-| `.dark_gray` | Dark gray |
-| `.light_gray` | Light gray |
-| `.gold` | Gold |
-| `.lime` | Lime green |
-| `.sky_blue` | Sky blue |
-| `.maroon` | Maroon |
-| `.violet` | Violet |
-| `.beige` | Beige |
-| `.brown` | Brown |
-| `.dark_brown` | Dark brown |
-| `.dark_green` | Dark green |
-| `.dark_purple` | Dark purple |
-| `.magenta` | Magenta |
+**Named Colors:** `.white`, `.black`, `.ray_white`, `.blank`, `.red`, `.green`, `.blue`, `.yellow`, `.orange`, `.pink`, `.purple`, `.gray`, `.dark_gray`, `.light_gray`, `.gold`, `.lime`, `.sky_blue`, `.maroon`, `.violet`, `.beige`, `.brown`, `.dark_brown`, `.dark_green`, `.dark_purple`, `.magenta` — or `rl.Color.init(r, g, b, a)` for custom.
 
-## Quick Reference: Key Codes
+**Key Codes:** `.a`-`.z`, `.zero`-`.nine`, `.f1`-`.f12`, `.space`, `.enter`, `.escape`, `.tab`, `.backspace`, `.delete`, `.up`/`.down`/`.left`/`.right`, `.left_shift`, `.left_control`, `.left_alt`
 
-| Key | Code | Key | Code |
-|-----|------|-----|------|
-| Space | `.space` | Escape | `.escape` |
-| Enter | `.enter` | Tab | `.tab` |
-| Backspace | `.backspace` | Delete | `.delete` |
-| Arrow Right | `.right` | Arrow Left | `.left` |
-| Arrow Up | `.up` | Arrow Down | `.down` |
-| A-Z | `.a` to `.z` | 0-9 | `.zero` to `.nine` |
-| F1-F12 | `.f1` to `.f12` | | |
-
-## Quick Reference: Mouse Buttons
-
-| Button | Code |
-|--------|------|
-| Left | `.left` |
-| Right | `.right` |
-| Middle | `.middle` |
-| Side | `.side` |
-| Extra | `.extra` |
-| Forward | `.forward` |
-| Back | `.back` |
+**Mouse Buttons:** `.left`, `.right`, `.middle`, `.side`, `.extra`, `.forward`, `.back`
 
 ## Module Reference
 
@@ -465,6 +468,10 @@ if (rl.checkCollisionBoxSphere(box, sphereCenter, sphereRadius)) {
 - **[Core API](references/api-core.md)** - Window, input, timing, Camera2D
 - **[Drawing API](references/api-drawing.md)** - 2D shapes, textures, text, collision
 - **[3D API](references/api-3d.md)** - Camera3D, models, animation, shaders, PBR
+- **[Math & GL API](references/api-math-gl.md)** - raymath (`rl.math.*`), rlgl (`rl.gl.*`)
+
+### GUI
+- **[Raygui API](references/api-raygui.md)** - GUI widgets, styling, dialogs
 
 ### Resources
 - **[Resources API](references/api-resources.md)** - Loading/unloading patterns

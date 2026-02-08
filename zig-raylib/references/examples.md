@@ -663,3 +663,40 @@ pub fn main() !void {
     }
 }
 ```
+
+## Raygui: Button with Message Box
+
+```zig
+const rl = @import("raylib");
+const rg = @import("raygui");
+
+pub fn main() !void {
+    rl.initWindow(400, 200, "raygui example");
+    defer rl.closeWindow();
+
+    rl.setTargetFPS(60);
+    var showMessageBox = false;
+
+    while (!rl.windowShouldClose()) {
+        rl.beginDrawing();
+        defer rl.endDrawing();
+
+        rl.clearBackground(.ray_white);
+
+        // Button — returns true when clicked
+        if (rg.button(.init(24, 24, 120, 30), "#191#Show Message"))
+            showMessageBox = true;
+
+        // Message box dialog
+        if (showMessageBox) {
+            const result = rg.messageBox(
+                .init(85, 70, 250, 100),
+                "#191#Message Box",
+                "Hi! This is a message",
+                "Nice;Cool",
+            );
+            if (result >= 0) showMessageBox = false;
+        }
+    }
+}
+```

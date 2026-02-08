@@ -484,7 +484,7 @@ rl.openURL("https://www.raylib.com");
 // Clipboard
 rl.setClipboardText("Hello");
 const text = rl.getClipboardText();
-const clipImage = rl.getClipboardImage();  // Get image from clipboard
+const clipImage = rl.getClipboardImage();  // Returns Image directly (no try needed)
 
 // Event waiting (for non-game apps to reduce CPU)
 rl.enableEventWaiting();    // Only process on events (saves CPU)
