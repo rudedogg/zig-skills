@@ -50,6 +50,9 @@ defer rl.unloadSound(soundFromWave);
 // Sound alias (shares audio buffer, saves memory)
 const soundAlias = rl.loadSoundAlias(sound);
 defer rl.unloadSoundAlias(soundAlias);
+
+// Update sound buffer with new data (for dynamic sounds)
+rl.updateSound(sound, data, sampleCount);
 ```
 
 ### Playing Sounds
@@ -283,6 +286,9 @@ if (rl.isAudioStreamPlaying(stream)) {
 rl.setAudioStreamVolume(stream, 0.8);
 rl.setAudioStreamPitch(stream, 1.0);
 rl.setAudioStreamPan(stream, 0.0);
+
+// Set default buffer size for new audio streams
+rl.setAudioStreamBufferSizeDefault(4096);
 ```
 
 ### Audio Callback (Advanced)
@@ -300,6 +306,20 @@ const callback = struct {
 }.process;
 
 rl.setAudioStreamCallback(stream, callback);
+```
+
+### Audio Stream Processors
+
+Attach DSP processors to individual streams or the entire audio pipeline:
+
+```zig
+// Process a specific stream (e.g., add reverb, filter)
+rl.attachAudioStreamProcessor(stream, processorCallback);
+rl.detachAudioStreamProcessor(stream, processorCallback);
+
+// Process the entire mixed audio output
+rl.attachAudioMixedProcessor(mixedProcessorCallback);
+rl.detachAudioMixedProcessor(mixedProcessorCallback);
 ```
 
 ## Wave Manipulation

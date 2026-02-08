@@ -20,6 +20,24 @@ pub fn main() !void {
 }
 ```
 
+## Validation Functions
+
+Check if a loaded resource is valid:
+
+```zig
+if (rl.isImageValid(image)) { /* image data loaded */ }
+if (rl.isTextureValid(texture)) { /* texture loaded on GPU */ }
+if (rl.isRenderTextureValid(target)) { /* render texture loaded on GPU */ }
+if (rl.isFontValid(font)) { /* font data loaded */ }
+if (rl.isShaderValid(shader)) { /* shader compiled on GPU */ }
+if (rl.isModelValid(model)) { /* model loaded, VAO/VBOs valid */ }
+if (rl.isMaterialValid(material)) { /* shader assigned, textures loaded */ }
+if (rl.isWaveValid(wave)) { /* wave data loaded */ }
+if (rl.isSoundValid(sound)) { /* sound buffers initialized */ }
+if (rl.isMusicValid(music)) { /* music context and buffers ready */ }
+if (rl.isAudioStreamValid(stream)) { /* audio stream buffers ready */ }
+```
+
 ## Images
 
 Images are CPU-side pixel data. Use for manipulation before uploading to GPU.
@@ -44,6 +62,12 @@ defer rl.unloadImage(rawImage);
 var frames: i32 = 0;
 const animImage = try rl.loadImageAnim("animation.gif", &frames);
 defer rl.unloadImage(animImage);
+
+// Animated image from memory
+const gifData: []const u8 = @embedFile("animation.gif");
+var frames2: i32 = 0;
+const animFromMem = try rl.loadImageAnimFromMemory(".gif", gifData, &frames2);
+defer rl.unloadImage(animFromMem);
 
 // From screen (screenshot)
 const screenshot = try rl.loadImageFromScreen();
@@ -105,14 +129,22 @@ image.contrast(0.5);
 image.brightness(50);
 image.replaceColor(.red, .blue);
 
+// Crop
+rl.imageCrop(&image, .{ .x = 10, .y = 10, .width = 64, .height = 64 });
+
 // Alpha
 image.alphaCrop(0.1);            // Remove transparent edges
 image.alphaClear(.black, 0.1);   // Set alpha based on threshold
 image.alphaMask(maskImage);      // Apply alpha from another image
 image.alphaPremultiply();
 
+// Extract single channel as grayscale
+const channelImage = rl.imageFromChannel(image, 0);  // 0=R, 1=G, 2=B, 3=A
+
 // Filters
 image.blurGaussian(4);
+rl.imageKernelConvolution(&image, &kernel);  // Custom convolution kernel
+rl.imageDither(&image, 4, 4, 4, 4);         // Dither to lower bpp
 
 // Format conversion
 image.setFormat(.uncompressed_r8g8b8a8);
@@ -120,6 +152,25 @@ image.toPOT(.black);  // Resize to power-of-two
 
 // Mipmaps (note: method is spelled "mimaps" in raylib-zig, not "mipmaps")
 image.mimaps();
+```
+
+### Pixel Access
+
+```zig
+// Get single pixel color
+const pixelColor = rl.getImageColor(image, 10, 20);
+
+// Load all pixels as Color array
+const colors = try rl.loadImageColors(image);
+defer rl.unloadImageColors(colors);
+// Access: colors[y * image.width + x]
+
+// Extract color palette
+const palette = try rl.loadImagePalette(image, 256);
+defer rl.unloadImagePalette(palette);
+
+// Get alpha border rectangle (bounding box of non-transparent pixels)
+const border = rl.getImageAlphaBorder(image, 0.1);
 ```
 
 ### Drawing on Images
@@ -142,6 +193,10 @@ image.drawImage(srcImage, srcRect, dstRect, .white);
 ```zig
 const success = image.exportToFile("output.png");
 const codeSuccess = image.exportAsCode("image_data.h");
+
+// Export to memory buffer (useful for network sending)
+const pngData = try rl.exportImageToMemory(image, ".png");
+defer rl.memFree(@ptrCast(pngData.ptr));
 ```
 
 ## Textures
@@ -183,6 +238,9 @@ rl.setTextureFilter(texture, .bilinear);  // .point, .bilinear, .trilinear, .ani
 
 // Texture wrap mode
 rl.setTextureWrap(texture, .repeat);  // .repeat, .clamp, .mirror_repeat, .mirror_clamp
+
+// Generate GPU mipmaps for a texture
+rl.genTextureMipmaps(&texture);
 ```
 
 ### Update Texture Data

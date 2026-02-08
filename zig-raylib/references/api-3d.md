@@ -52,6 +52,29 @@ camera.target = player.position;
 const viewMatrix = camera.getMatrix();
 ```
 
+### UpdateCameraPro (Advanced Control)
+
+```zig
+// Direct control over camera movement, rotation, and zoom
+rl.updateCameraPro(&camera,
+    .init(moveX, moveY, moveZ),       // Movement vector
+    .init(rotYaw, rotPitch, rotRoll),  // Rotation (degrees)
+    zoom,                               // Zoom increment
+);
+
+// Example: WASD + mouse look
+const ms: f32 = 10.0 * dt;
+rl.updateCameraPro(&camera,
+    .init(
+        if (rl.isKeyDown(.w)) ms else if (rl.isKeyDown(.s)) -ms else 0,
+        if (rl.isKeyDown(.d)) ms else if (rl.isKeyDown(.a)) -ms else 0,
+        0,
+    ),
+    .init(rl.getMouseDelta().x * 0.05, rl.getMouseDelta().y * 0.05, 0),
+    0,
+);
+```
+
 ### Coordinate Conversion
 
 ```zig
@@ -181,6 +204,13 @@ const box = rl.BoundingBox{
 rl.drawBoundingBox(box, .green);
 ```
 
+### Rays
+
+```zig
+// Draw a ray as a line (useful for debugging)
+rl.drawRay(ray, .red);
+```
+
 ## Models
 
 ### Loading Models
@@ -214,6 +244,36 @@ model.drawEx(
 // Wireframe
 model.drawWires(.init(0, 0, 0), 1.0, .gray);
 model.drawWiresEx(.init(0, 0, 0), .init(0, 1, 0), 45.0, .init(1, 1, 1), .gray);
+
+// Point cloud
+rl.drawModelPoints(model, .init(0, 0, 0), 1.0, .red);
+rl.drawModelPointsEx(model, .init(0, 0, 0), .init(0, 1, 0), 45.0, .init(1, 1, 1), .red);
+```
+
+### Billboards
+
+Billboards are 2D textures that always face the camera — useful for particles, sprites in 3D, labels.
+
+```zig
+// Basic billboard
+rl.drawBillboard(camera, texture, .init(0, 2, 0), 1.0, .white);
+
+// Billboard from texture region (sprite atlas)
+const source = rl.Rectangle.init(0, 0, 32, 32);
+rl.drawBillboardRec(camera, texture, source, .init(0, 2, 0), .init(1, 1), .white);
+
+// Full control: position, up vector, size, origin, rotation
+rl.drawBillboardPro(
+    camera,
+    texture,
+    source,               // Source rectangle in texture
+    .init(0, 2, 0),       // World position
+    .init(0, 1, 0),       // Up vector
+    .init(1, 1),           // Size
+    .init(0.5, 0.5),       // Origin (center)
+    0,                     // Rotation (degrees)
+    .white,
+);
 ```
 
 ### Model Transform
@@ -238,6 +298,7 @@ rl.drawBoundingBox(bounds, .green);
 
 ```zig
 // Generate basic meshes
+const poly = rl.genMeshPoly(6, 1.0);     // 6-sided polygon
 const cube = rl.genMeshCube(2, 2, 2);
 const sphere = rl.genMeshSphere(1.0, 16, 16);
 const hemiSphere = rl.genMeshHemiSphere(1.0, 16, 16);
@@ -269,6 +330,35 @@ rl.genMeshTangents(&mesh);
 
 // Upload mesh to GPU
 rl.uploadMesh(&mesh, false);  // false = dynamic, true = static
+
+// Update specific buffer in GPU
+rl.updateMeshBuffer(mesh, bufferIndex, data, dataSize, offset);
+
+// Get mesh bounds
+const meshBounds = rl.getMeshBoundingBox(mesh);
+
+// Export mesh to file
+_ = rl.exportMesh(mesh, "output.obj");
+_ = rl.exportMeshAsCode(mesh, "mesh_data.h");
+```
+
+### Instanced Rendering
+
+Draw many copies of the same mesh with different transforms (much faster than individual draws):
+
+```zig
+// Create transform matrices for each instance
+var transforms: [100]rl.Matrix = undefined;
+for (&transforms, 0..) |*t, i| {
+    t.* = rl.math.matrixTranslate(
+        @floatFromInt(i % 10) * 2.0,
+        0,
+        @floatFromInt(i / 10) * 2.0,
+    );
+}
+
+// Draw all instances in one call
+rl.drawMeshInstanced(mesh, material, &transforms);
 ```
 
 ## Materials
@@ -299,6 +389,23 @@ defer rl.unloadMaterial(material);
 // Set material texture
 model.materials[0].maps[@intFromEnum(rl.MaterialMapIndex.albedo)].texture = texture;
 model.materials[0].maps[@intFromEnum(rl.MaterialMapIndex.albedo)].color = .white;
+```
+
+### Load Materials from File
+
+```zig
+const materials = try rl.loadMaterials("materials.mtl");
+defer for (materials) |mat| rl.unloadMaterial(mat);
+```
+
+### Set Material Texture (Helper)
+
+```zig
+// Alternative to direct assignment — sets texture for a material map type
+rl.setMaterialTexture(&model.materials[0], .albedo, texture);
+
+// Equivalent to:
+model.materials[0].maps[@intFromEnum(rl.MaterialMapIndex.albedo)].texture = texture;
 ```
 
 ### Set Model Material
@@ -334,6 +441,10 @@ var animFrame: i32 = 0;
 // In update loop:
 animFrame = @mod(animFrame + 1, anims[animIndex].frameCount);
 rl.updateModelAnimation(model, anims[animIndex], animFrame);
+
+// Alternative: GPU skinning (updates bone matrices instead of mesh vertices)
+// Better performance for complex models
+rl.updateModelAnimationBones(model, anims[animIndex], animFrame);
 
 // In draw loop:
 {

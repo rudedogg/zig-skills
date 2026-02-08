@@ -172,6 +172,34 @@ rl.drawSplineBezierQuadratic(&points, 2.0, .purple);  // Quadratic
 rl.drawSplineBezierCubic(&points, 2.0, .orange);      // Cubic
 ```
 
+### Spline Segments (Single Segment)
+
+```zig
+// Draw individual spline segments between specific control points
+rl.drawSplineSegmentLinear(p1, p2, 2.0, .blue);
+rl.drawSplineSegmentBasis(p1, p2, p3, p4, 2.0, .green);
+rl.drawSplineSegmentCatmullRom(p1, p2, p3, p4, 2.0, .red);
+rl.drawSplineSegmentBezierQuadratic(p1, c2, p3, 2.0, .purple);
+rl.drawSplineSegmentBezierCubic(p1, c2, c3, p4, 2.0, .orange);
+```
+
+### Spline Point Evaluation
+
+Get a point along a spline at parameter `t` (0.0 to 1.0):
+
+```zig
+const pt = rl.getSplinePointLinear(startPos, endPos, t);
+const pt2 = rl.getSplinePointBasis(p1, p2, p3, p4, t);
+const pt3 = rl.getSplinePointCatmullRom(p1, p2, p3, p4, t);
+const pt4 = rl.getSplinePointBezierQuad(p1, c2, p3, t);
+const pt5 = rl.getSplinePointBezierCubic(p1, c2, c3, p4, t);
+
+// Useful for placing objects along curves or path following
+var t: f32 = 0;
+t += speed * dt;
+const position = rl.getSplinePointCatmullRom(p1, p2, p3, p4, t);
+```
+
 ## Textures
 
 ### Loading Textures
@@ -261,6 +289,12 @@ rl.drawTextureRec(target.texture, source, .init(0, 0), .white);
 
 ## Text
 
+### FPS Display
+
+```zig
+rl.drawFPS(10, 10);  // Draw current FPS counter at position
+```
+
 ### Default Font
 
 ```zig
@@ -269,6 +303,9 @@ rl.drawText("Hello World!", 100, 100, 20, .black);
 
 // Measure text dimensions
 const width = rl.measureText("Hello", 20);
+
+// Set line spacing for multi-line text
+rl.setTextLineSpacing(24);  // Pixels between lines
 ```
 
 ### Custom Fonts
@@ -290,6 +327,17 @@ rl.drawTextPro(font, "Rotated", .init(200, 200), .init(50, 16), 45.0, 32, 2, .re
 
 // Measure text with font
 const size = rl.measureTextEx(font, "Hello", 32, 2);
+```
+
+### Codepoint Drawing
+
+```zig
+// Draw individual Unicode codepoints
+rl.drawTextCodepoint(font, 0x0041, .init(100, 100), 32, .black);  // Draw 'A'
+
+// Draw array of codepoints
+const codepoints = [_]c_int{ 0x0048, 0x0065, 0x006C, 0x006C, 0x006F };
+rl.drawTextCodepoints(font, &codepoints, .init(100, 100), 32, 2, .black);
 ```
 
 ### SDF Fonts
@@ -438,6 +486,18 @@ const alpha = color.alpha(0.7);              // Set alpha
 
 // Color conversion
 const normalized = color.normalize();        // Vector4 [0..1]
+const fromNorm = rl.colorFromNormalized(normalized);  // Back to Color
 const hsvValues = color.toHSV();            // Vector3 (H, S, V)
 const intValue = color.toInt();             // 0xRRGGBBAA
+
+// Color comparison
+if (rl.colorIsEqual(color1, color2)) {
+    // Colors are the same
+}
+
+// Color interpolation
+const blended = rl.colorLerp(.red, .blue, 0.5);  // Interpolate between colors
+
+// Alpha blending
+const result = rl.colorAlphaBlend(dstColor, srcColor, tintColor);
 ```
