@@ -71,7 +71,7 @@ var r: std.Io.Reader = .fixed("hello\nworld");
 const line = (try r.takeDelimiter('\n')).?;  // "hello" (returns null at EOF)
 ```
 
-**Removed:** `BufferedWriter`, `CountingWriter`, `std.io.bufferedWriter()`
+**Deprecated:** `BufferedWriter`, `CountingWriter`, `std.io.bufferedWriter()`
 
 **Deprecated:** `GenericWriter`, `GenericReader`, `AnyWriter`, `AnyReader`, `FixedBufferStream`
 
@@ -119,6 +119,9 @@ exe.root_module.addImport("helper", helper_mod);
 const dep = b.dependency("lib", .{ .target = target, .optimize = optimize });
 exe.root_module.addImport("lib", dep.module("lib"));
 ```
+
+**Compile-level methods deprecated:** `exe.linkSystemLibrary()`, `exe.addCSourceFiles()`,
+`exe.addIncludePath()`, `exe.linkLibC()` are deprecated — use `exe.root_module.*` equivalents instead.
 
 See **[std.Build reference](references/std-build.md)** for complete build system documentation.
 
@@ -247,6 +250,11 @@ switch (value) {
 | `use of undefined value` | Arithmetic on `undefined` is now illegal |
 | `type 'f32' cannot represent integer` | Use float literal: `123_456_789.0` not `123_456_789` |
 | `ambiguous format string` | Use `{f}` for format methods |
+| `sanitize_c = true` | Type changed to `?std.zig.SanitizeC` — use `.full`, `.trap`, or `.off` |
+| `std.fifo.LinearFifo` | Removed — use `std.Io.Reader`/`Writer` patterns |
+| `posix.sendfile` | Removed — use `std.fs.File` writer `.sendFileAll()` |
+| `std.fmt.Formatter` | Deprecated — renamed to `std.fmt.Alt` |
+| `fmtSliceEscapeLower`/`Upper` | Use `std.ascii.hexEscape(bytes, .lower/.upper)` |
 
 ## Language References
 

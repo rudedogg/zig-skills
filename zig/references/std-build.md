@@ -712,15 +712,19 @@ exe.root_module.addAnonymousImport("schema", .{
 
 ## C/C++ Integration
 
+> **Note:** Compile-level methods like `exe.addCSourceFiles()`, `exe.linkSystemLibrary()`,
+> `exe.addIncludePath()`, `exe.linkLibC()` are **deprecated** (to be removed after 0.15.0).
+> Use `exe.root_module.*` equivalents shown below.
+
 ### Adding C Sources
 ```zig
-exe.addCSourceFiles(.{
+exe.root_module.addCSourceFiles(.{
     .root = b.path("src/c"),
     .files = &.{ "foo.c", "bar.c" },
     .flags = &.{ "-Wall", "-O2" },
 });
 
-exe.addCSourceFile(.{
+exe.root_module.addCSourceFile(.{
     .file = b.path("src/main.c"),
     .flags = &.{"-std=c11"},
 });
@@ -728,8 +732,8 @@ exe.addCSourceFile(.{
 
 ### Include Paths and Macros
 ```zig
-exe.addIncludePath(b.path("include"));
-exe.addSystemIncludePath(b.path("deps/include"));
+exe.root_module.addIncludePath(b.path("include"));
+exe.root_module.addSystemIncludePath(b.path("deps/include"));
 exe.root_module.addCMacro("DEBUG", "1");
 exe.root_module.addCMacro("VERSION", "\"1.0.0\"");
 ```
@@ -737,8 +741,8 @@ exe.root_module.addCMacro("VERSION", "\"1.0.0\"");
 ### Linking Libraries
 ```zig
 // System library
-exe.linkSystemLibrary("pthread");
-exe.linkSystemLibrary("ssl");
+exe.root_module.linkSystemLibrary("pthread", .{});
+exe.root_module.linkSystemLibrary("ssl", .{});
 
 // Static library file
 exe.addObjectFile(b.path("lib/libfoo.a"));
@@ -747,16 +751,16 @@ exe.addObjectFile(b.path("lib/libfoo.a"));
 exe.addLibraryPath(b.path("lib"));
 exe.addRPath(b.path("lib"));
 
-// Link libc
-exe.linkLibC();
-exe.linkLibCpp();
+// Link libc (set via createModule options or directly)
+exe.root_module.link_libc = true;
+exe.root_module.link_libcpp = true;
 ```
 
 ### pkg-config Integration
 ```zig
 // Use pkg-config to find library
-exe.linkSystemLibrary("openssl");
-exe.linkSystemLibrary("libcurl");
+exe.root_module.linkSystemLibrary("openssl", .{});
+exe.root_module.linkSystemLibrary("libcurl", .{});
 ```
 
 ### Best Practices: Prefer Zig APIs Over Clang Flags
@@ -773,11 +777,11 @@ const mod = b.createModule(.{
     .target = target,
     .optimize = optimize,
     .link_libc = false,    // Instead of -nolibc flag
-    .sanitize_c = false,   // Instead of -fno-sanitize flags
+    .sanitize_c = .off,    // Type is ?std.zig.SanitizeC (.off/.trap/.full)
 });
 
 // AVOID: Raw Clang flags (use only when no Zig API exists)
-exe.addCSourceFiles(.{
+exe.root_module.addCSourceFiles(.{
     .files = &.{"foo.c"},
     .flags = &.{"-DDEBUG"},  // Use addCMacro instead when possible
 });
