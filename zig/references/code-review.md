@@ -53,6 +53,7 @@ Systematic code review checklist organized by detection confidence level. Work t
 | `allocPrint` for bounded strings | Use `bufPrint` with stack buffer | [3.10](#310-stack-vs-heap-allocation) |
 | Runtime constant lookup | Comptime lookup table | [3.11](#311-comptime-optimization) |
 | `expectEqual` with strings/slices | Use `expectEqualStrings`/`expectEqualSlices` | [3.14](#314-testing-best-practices) |
+| `len`, `pos`, `n` for numeric vars | Use `_count`/`_index`/`_size`/`_offset` suffixes | [3.17](#317-numeric-variable-naming-indexcountoffsetsize) |
 
 ---
 
@@ -71,7 +72,7 @@ Systematic code review checklist organized by detection confidence level. Work t
 
 - [1. ALWAYS FLAG (100% Confidence)](#1-always-flag-100-confidence)
 - [2. FLAG WITH CONTEXT (High Confidence)](#2-flag-with-context-high-confidence)
-- [3. SUGGEST (Advisory)](#3-suggest-advisory)
+- [3. SUGGEST (Advisory)](#3-suggest-advisory) (incl. [3.17 Numeric Naming](#317-numeric-variable-naming-indexcountoffsetsize))
 
 ---
 
@@ -839,6 +840,8 @@ fn getSection(index: SectionIndex) *Section { ... }
 fn getSymbol(index: SymbolIndex) *Symbol { ... }
 ```
 
+See also [3.17](#317-numeric-variable-naming-indexcountoffsetsize) for naming conventions that complement type safety.
+
 ### 2.7 Error Handling Selection
 
 | Detect | `anyerror` return in public API, or blind `try` propagation |
@@ -1429,6 +1432,70 @@ pub fn eql(_: @This(), a: []const u8, b: []const u8) bool {
     return std.mem.eql(u8, a, b);
 }
 ```
+
+### 3.17 Numeric Variable Naming (index/count/offset/size)
+
+| Detect | Mixed use of `length`, `size`, `count`, `index` without consistent distinction |
+|--------|-------------------------------------------------------------------------------|
+| Risk | Off-by-one errors, index space confusion |
+
+Use consistent suffixes to distinguish numeric quantities (from [TigerBeetle's TigerStyle](https://github.com/tigerbeetle/tigerbeetle/blob/main/docs/TIGER_STYLE.md)):
+
+| Suffix | Meaning | Domain | Invariant |
+|--------|---------|--------|-----------|
+| `_count` | Number of items | Items | — |
+| `_index` | Position of one item | Items | `index < count` |
+| `_size` | Number of bytes | Bytes | `size = @sizeOf(T) * count` |
+| `_offset` | Byte position | Bytes | `offset < size` |
+
+Avoid `length`/`len` for new code — it's ambiguous (Rust `str::len` = byte size; Python `len(str)` = codepoint count). Note: Zig's stdlib uses `.len` on slices, which is fine — this convention applies to your own variable names.
+
+**Wrong:**
+```zig
+fn process(data: []const u8, len: usize) void {
+    var pos: usize = 0;
+    var n: usize = 0;
+    while (pos < len) {
+        // Are pos and len in the same domain? Hard to tell.
+        n += 1;
+        pos += record_len;  // Is this bytes or items?
+    }
+}
+```
+
+**Right:**
+```zig
+fn process(data: []const u8, data_size: usize) void {
+    var record_index: usize = 0;
+    var data_offset: usize = 0;
+    while (data_offset < data_size) {
+        // Clear: offset < size (both bytes), index counts items
+        record_index += 1;
+        data_offset += record_size;  // size = bytes, obviously
+    }
+}
+```
+
+Converting between index and offset spaces should be explicit:
+
+```zig
+const node_offset = @intFromPtr(node) - @intFromPtr(pool.buffer.ptr);
+const node_index = @divExact(node_offset, node_size);
+// Correctness is mechanical: offset / size = index ✓
+```
+
+**Naming tips:**
+- Use "big-endian" naming — qualifiers as suffixes: `source_index`, `target_index` (not `idx_source`)
+- Choose dual names of equal length for visual alignment: `source`/`target` (not `src`/`destination`)
+
+Aligned names make bugs pop out during review:
+
+```zig
+source_index += marker.literal_word_count;
+target_index += marker.literal_word_count;
+```
+
+See also [2.6](#26-type-unsafe-index-usage) for enforcing index safety with distinct enum types.
 
 ---
 
