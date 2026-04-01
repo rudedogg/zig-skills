@@ -1,0 +1,21 @@
+{
+  "$schema": "https://anthropic.com/claude-code/plugin.schema.json",
+  "name": "zig-skills",
+  "version": "0.1.0",
+  "description": "Claude Code plugin for Zig development, covering language patterns, Raylib, and SDL3 bindings.",
+  "author": {
+    "name": "zig-incubator",
+    "url": "https://github.com/zig-incubator"
+  },
+  "repository": "https://github.com/zig-incubator/zig-skills",
+  "homepage": "https://github.com/zig-incubator/zig-skills",
+  "license": "Apache-2.0",
+  "keywords": [
+    "zig",
+    "raylib",
+    "sdl3",
+    "claude-code",
+    "skill",
+    "gamedev"
+  ]
+}

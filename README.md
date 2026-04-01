@@ -25,7 +25,18 @@ See https://austinrude.com/blog/making-a-zig-agent-skill/ for details.
 
 ## Usage
 
-Install the `zig` directory into `~/.claude/skills/` per [Claude Code skill documentation](https://docs.anthropic.com/en/docs/claude-code/skills).
+### Install as a Plugin
+
+After the Claude Code is installed, you can install this skill as a plugin:
+
+```bash
+/plugin marketplace add zig-incubator/zig-skills
+/plugin install zig-skills@zig-skills
+```
+
+### Manual Installation
+
+Alternatively, install the `zig` directory into `~/.claude/skills/` per [Claude Code skill documentation](https://docs.anthropic.com/en/docs/claude-code/skills).
 
 Example prompt:
 ```
