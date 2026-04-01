@@ -30,7 +30,7 @@ See https://austinrude.com/blog/making-a-zig-agent-skill/ for details.
 After the Claude Code is installed, you can install this skill as a plugin:
 
 ```bash
-/plugin marketplace add rudedogg/zig-skills
+/plugin marketplace add zig-incubator/zig-skills
 /plugin install zig-skills@zig-skills
 ```
 
